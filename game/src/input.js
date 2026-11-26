@@ -65,7 +65,8 @@ export function bindInput(input, callbacks) {
   if (slider) {
     const setFromEvent = (event) => {
       const rect = slider.getBoundingClientRect();
-      const ratio = Math.min(1, Math.max(0, 1 - (event.clientY - rect.top) / rect.height));
+      // Horizontal slider: throttle rises from left (0%) to right (100%).
+      const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
       input.mouseThrottle = Math.round(ratio * 100);
     };
     slider.addEventListener('pointerdown', (event) => {

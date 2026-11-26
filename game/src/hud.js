@@ -181,9 +181,11 @@ export function updateHud(hud, view) {
   if (compass) drawCompass(compass.getContext('2d'), readouts.headingDeg);
   drawHorizon(hud.horizonCtx, state.pitch, state.roll);
   drawMinimap(hud.mapCtx, state, rings, nextRingIndex, { x: 0, z: 180, headingDeg: 0 }, { x: 1500, z: -760, headingDeg: 25 });
-  // Throttle slider fill.
+  // Throttle slider fill, now horizontal (landscape): the fill grows from
+  // the left as throttle rises, and the knob reads THR + the live percent.
   const fill = $('throttle-fill');
-  if (fill) fill.style.height = `${state.throttle}%`;
+  if (fill) fill.style.width = `${clamp(state.throttle, 0, 100)}%`;
+  setText('throttle-knob-text', `THR ${Math.round(state.throttle)}%`);
 }
 
 // Big centre-screen banners (title, pause, game over, mission complete).

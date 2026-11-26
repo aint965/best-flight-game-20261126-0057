@@ -46,12 +46,16 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; co
    gauges above, the attitude dial below, and the aircraft in the centre. */
 .hud-buttons.hud-left-mid { position: absolute; left: 14px; top: 248px; pointer-events: auto; z-index: 6; }
 #throttle-slider {
-  position: relative; width: 34px; height: 150px; border-radius: 10px;
+  position: relative; width: 280px; height: 30px; border-radius: 10px;
   background: rgba(8, 18, 30, 0.62); border: 1px solid rgba(255, 209, 102, 0.55);
   cursor: pointer; overflow: hidden; touch-action: none;
 }
-#throttle-fill { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: linear-gradient(to top, #ff8c42, #ffd166); }
-#throttle-knob { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; color: #fff; text-shadow: 0 1px 3px #000; }
+#throttle-fill { position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: linear-gradient(to right, #ff8c42, #ffd166); }
+#throttle-knob { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: #fff; text-shadow: 0 1px 3px #000; }
+/* Dark pill behind the label so "THR 68%" reads the same whether it sits
+   over the orange fill or the dark track (the fill edge runs through the
+   middle of the text at mid throttle). */
+#throttle-knob span { background: rgba(8, 18, 30, 0.72); border-radius: 999px; padding: 2px 10px; }
 .hud-buttons { display: flex; flex-direction: column; gap: 6px; }
 .hud-buttons button, .ghost-btn {
   pointer-events: auto; cursor: pointer; background: rgba(8, 18, 30, 0.72); color: #f2ede3;
