@@ -44,13 +44,17 @@ export const MISTY_ISLANDS = [
 // Every texture is drawn in code from the seeded rng, so the world stays
 // deterministic and offline: mottled grass, speckled asphalt, grainy sand,
 // a near-white sea shimmer, and a soft radial glow for the sun.
-function canvasTexture(size, draw, repeat = 1) {
+// Round 9: repeatX/repeatY are separate — a cone's UV wraps once around a
+// circumference many times its height, so one repeat value would stretch
+// every speckle into a horizontal streak. Callers pass (rx, ry) for
+// roughly square texels; a single number keeps the old square behaviour.
+function canvasTexture(size, draw, repeat = 1, repeatY = null) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   draw(c.getContext('2d'), size);
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeat, repeat);
+  tex.repeat.set(repeat, repeatY === null ? repeat : repeatY);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
@@ -105,6 +109,116 @@ function seaShimmerTexture(rng) {
   }, 30);
 }
 
+// Round 9 — continuous grain for hills. The base is deliberately near-
+// neutral and light: the material colour and the vertex colours carry the
+// hue, the texture only adds grain, so a slope reads as ground instead of
+// a flat fill. Repeat (40, 3): a tile is ~30 m around a 190 m hill and
+// ~16 m up its slope, so the speckle lands at boulder scale, not wallpaper.
+function rockTexture(rng) {
+  return canvasTexture(256, (ctx, s) => {
+    ctx.fillStyle = '#c9cbb8';
+    ctx.fillRect(0, 0, s, s);
+    speckle(ctx, s, rng, 900, ['#a8b39a', '#d8dcc8', '#8fa07e', '#b5bd9e', '#7d8f6d'], 2, 14, 0.2, 0.5);
+    speckle(ctx, s, rng, 2200, ['#7d8f6d', '#dde0c8', '#9aa78a', '#6f8262', '#5d7050'], 0.6, 2.4, 0.25, 0.6);
+    // Round 9 fix pass: darker, higher-alpha flecks — the first pass's
+    // grain was sub-pixel at 300 m and the hills still read as smooth.
+    speckle(ctx, s, rng, 140, ['#3d4c32', '#6e5a44', '#4d5c40'], 1, 5, 0.45, 0.75);
+  }, 40, 3);
+}
+
+// Round 9 — strata for the volcano: horizontal bands with wavy edges,
+// drawn as full-width stripes so they wrap the cone as continuous rock
+// layers, plus coarse speckle. Repeat (6, 10): a tile spans ~1000 m
+// around the cone and 65 m up it, five bands a tile, so a layer reads
+// every ~13 m of height — sedimentary scale on a 650 m mountain.
+function strataTexture(rng) {
+  return canvasTexture(256, (ctx, s) => {
+    ctx.fillStyle = '#9a8d7c';
+    ctx.fillRect(0, 0, s, s);
+    // Round 9 fix pass: bands lightened — the first pass's dark bands
+    // (#5d5348) multiplied with the rock colour made the slope read
+    // almost black on its shaded (camera-facing) side.
+    const bands = ['#7d7268', '#a89a82', '#6e6258', '#b8a894', '#8d7f72'];
+    for (let b = 0; b < 5; b++) {
+      ctx.fillStyle = bands[b % bands.length];
+      const y0 = (b * s) / 5;
+      ctx.beginPath();
+      ctx.moveTo(0, y0);
+      for (let x = 0; x <= s; x += 8) {
+        ctx.lineTo(x, y0 + Math.sin(x * 0.05 + b * 2.1) * 4 + Math.sin(x * 0.13 + b) * 2);
+      }
+      for (let x = s; x >= 0; x -= 8) {
+        ctx.lineTo(x, y0 + s / 5 + Math.sin(x * 0.05 + b * 2.1) * 4 + Math.sin(x * 0.13 + b) * 2);
+      }
+      ctx.closePath();
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    speckle(ctx, s, rng, 500, ['#4d4438', '#b5a88f', '#6e6258', '#c9bda6'], 1, 6, 0.25, 0.55);
+  }, 6, 10);
+}
+
+// Round 9 — ash cap: pale grey ash with darker clinker speckle, so the
+// summit reads as ash, not a painted white cone.
+function ashTexture(rng) {
+  return canvasTexture(256, (ctx, s) => {
+    ctx.fillStyle = '#ddd6c8';
+    ctx.fillRect(0, 0, s, s);
+    speckle(ctx, s, rng, 700, ['#c9c2b2', '#e8e2d4', '#b5ad9c', '#f2eee2'], 2, 12, 0.2, 0.5);
+    speckle(ctx, s, rng, 500, ['#8a8272', '#6e675c', '#a89e8a'], 0.8, 3, 0.3, 0.6);
+  }, 4, 2);
+}
+
+// Round 9 — the storm wall's body as an alpha silhouette: a ragged top
+// edge (layered sine noise, so no straight line anywhere), sides and
+// bottom fading to transparent. The wall keeps reading as a front, but
+// its outline is weather now, not a rectangle.
+function stormWallTexture(rng) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 512, 256);
+  const top = [];
+  for (let x = 0; x <= 512; x += 4) {
+    top.push(48 + Math.sin(x * 0.021) * 26 + Math.sin(x * 0.047 + 1.7) * 16 + Math.sin(x * 0.11 + 0.6) * 8);
+  }
+  const g = ctx.createLinearGradient(0, 30, 0, 256);
+  g.addColorStop(0, '#2c3547');
+  g.addColorStop(0.55, '#39445a');
+  g.addColorStop(1, '#4a5568');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, 256);
+  for (let i = 0; i < top.length; i++) ctx.lineTo(i * 4, top[i]);
+  ctx.lineTo(512, 256);
+  ctx.closePath();
+  ctx.fill();
+  // Soften the silhouette: fade the left/right edges and the bottom into
+  // nothing, so the wall dissolves into haze instead of ending in a line.
+  ctx.globalCompositeOperation = 'destination-in';
+  const fadeL = ctx.createLinearGradient(0, 0, 70, 0);
+  fadeL.addColorStop(0, 'rgba(0,0,0,0)');
+  fadeL.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.fillStyle = fadeL;
+  ctx.fillRect(0, 0, 70, 256);
+  const fadeR = ctx.createLinearGradient(512, 0, 442, 0);
+  fadeR.addColorStop(0, 'rgba(0,0,0,0)');
+  fadeR.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.fillStyle = fadeR;
+  ctx.fillRect(442, 0, 70, 256);
+  const fadeB = ctx.createLinearGradient(0, 256, 0, 190);
+  fadeB.addColorStop(0, 'rgba(0,0,0,0)');
+  fadeB.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.fillStyle = fadeB;
+  ctx.fillRect(0, 190, 512, 66);
+  ctx.globalCompositeOperation = 'source-over';
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function glowTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
@@ -148,11 +262,13 @@ function numberTexture(text) {
 }
 
 // Slope shading for hills, cheap and seeded-stable: per-vertex green
-// shading — darker at the foot, lighter toward the peak, plus two layers of
-// per-wedge patch variation from a position hash (a coarse 3-wedge wash and
-// a finer 7-wedge speckle), so a hill reads as mottled ground instead of a
-// smooth cone. No rng() calls here, so the seeded stream (and therefore
-// the trees and clouds after it) stays identical.
+// shading — darker at the foot, lighter toward the peak, plus three layers
+// of per-wedge patch variation from a position hash (a coarse 3-wedge wash,
+// a finer 7-wedge speckle, and a 13-wedge grain), so a hill reads as
+// mottled ground instead of a smooth cone. No rng() calls here, so the
+// seeded stream (and therefore the trees and clouds after it) stays
+// identical. Round 9: amplitudes raised (the round-8 wash was too timid
+// to read at 300 m) and the grain layer added.
 function shadeCone(geo, h) {
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
@@ -164,12 +280,43 @@ function shadeCone(geo, h) {
     const a = Math.atan2(vz, vx);
     const wash = Math.sin(a * 3 + vy * 0.13);
     const fine = Math.sin(a * 7 - vy * 0.05);
-    const patch = 0.88 + 0.09 * wash + 0.05 * fine;
+    const grain = Math.sin(a * 13 + vy * 0.31);
+    const patch = 0.82 + 0.12 * wash + 0.08 * fine + 0.04 * grain;
     // Darker, damper base band; drier, sunlit peak.
-    const shade = (0.78 + 0.3 * t) * patch;
+    // Round 9 fix pass: floor raised (0.72 -> 0.78) — the round-9 first
+    // pass came out too dark on the camera-facing (shaded) slopes.
+    const shade = (0.78 + 0.32 * t) * patch;
     colors[i * 3] = shade * (1 + 0.06 * t);
     colors[i * 3 + 1] = shade * (0.96 + 0.04 * patch);
     colors[i * 3 + 2] = shade * 0.94;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+
+// Round 9 — the same idea for the volcano, in rock: broad horizontal
+// strata bands (six over the height, so a layer reads every ~100 m even
+// on the 5-ring cone), darker damp base, pale ash toward the summit, plus
+// the same position-hash grain. No rng() calls — stream-safe.
+function shadeVolcano(geo, h) {
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const vx = pos.getX(i);
+    const vy = pos.getY(i);
+    const vz = pos.getZ(i);
+    const t = clamp((vy + h / 2) / h, 0, 1);
+    const a = Math.atan2(vz, vx);
+    const band = Math.sin(t * Math.PI * 6 + Math.sin(a * 2) * 0.7);
+    const grain = Math.sin(a * 11 + vy * 0.09) * 0.5 + Math.sin(a * 23 - vy * 0.05) * 0.5;
+    const patch = 0.86 + 0.09 * band + 0.05 * grain;
+    // Dark base, lighter mid-slope, pale ash near the summit.
+    // Round 9 fix pass: floor raised (0.68 -> 0.80) and the material
+    // colour lightened — the first pass rendered the camera-facing
+    // (eastern, shaded) slope nearly black against the sunset.
+    const shade = (0.80 + 0.28 * t + 0.12 * Math.max(0, t - 0.8) * 5) * patch;
+    colors[i * 3] = shade;
+    colors[i * 3 + 1] = shade * 0.96;
+    colors[i * 3 + 2] = shade * 0.92;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 }
@@ -232,7 +379,11 @@ function makePine(rng) {
 // river, a blue guide line across the plateau. Built as a triangle strip
 // 0.15 m above the grass so it never z-fights; the path stays 35+ m clear
 // of the home strip on every side, so no landing ever touches water.
-function riverMesh(points, width) {
+// Round 9: colour/height are parameters — the main ribbon is 20 m wide
+// (was 14: at a grazing chase-camera angle 14 m crushed to a hairline)
+// with a paler 8 m highlight ribbon riding 0.07 m higher down its middle,
+// so the river reads as water, not a scratch in the grass.
+function riverMesh(points, width, color = 0x4aa8d8, y = 2.65, opacity = 0.92) {
   const verts = [];
   const idx = [];
   for (let i = 0; i < points.length; i++) {
@@ -246,10 +397,15 @@ function riverMesh(points, width) {
     dz /= len;
     const ox = (-dz * width) / 2;
     const oz = (dx * width) / 2;
-    verts.push(x + ox, 2.65, z + oz, x - ox, 2.65, z - oz);
+    verts.push(x + ox, y, z + oz, x - ox, y, z - oz);
     if (i > 0) {
       const a = (i - 1) * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      // Winding: the front face must point UP (+y). The first version
+      // pushed (a, a+1, a+2, a+1, a+3, a+2), whose cross product points
+      // DOWN — the ribbon was backface-culled from above, so the river
+      // never rendered in any shot (round 8's "river" existed only in the
+      // code; the pond, a CircleGeometry, rendered fine and hid the bug).
+      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -258,7 +414,7 @@ function riverMesh(points, width) {
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(
     geo,
-    new THREE.MeshBasicMaterial({ color: 0x4aa8d8, transparent: true, opacity: 0.92 }),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity }),
   );
   mesh.renderOrder = 1;
   return mesh;
@@ -295,7 +451,10 @@ function islandMesh(def, rng, mats) {
     shadeCone(hillGeo, def.hill.h);
     const hill = new THREE.Mesh(
       hillGeo,
-      new THREE.MeshLambertMaterial({ color: 0x3f8f4f, flatShading: true, vertexColors: true }),
+      // Round 9: the rock grain texture rides under the vertex colours —
+      // map * colour * vertex colour — so the slope gets continuous noise
+      // at boulder scale on top of the per-vertex wash.
+      new THREE.MeshLambertMaterial({ map: mats.rock, color: 0x3f8f4f, flatShading: true, vertexColors: true }),
     );
     hill.position.set(def.hill.dx, PLATEAU_TOP - 2 + def.hill.h / 2, def.hill.dz);
     group.add(hill);
@@ -334,7 +493,8 @@ function islandMesh(def, rng, mats) {
     shadeCone(geo, def.h);
     const hill = new THREE.Mesh(
       geo,
-      new THREE.MeshLambertMaterial({ color: 0x3f8f4f, flatShading: true, vertexColors: true }),
+      // Round 9: rock grain under the vertex colours, same as the airfield hills.
+      new THREE.MeshLambertMaterial({ map: mats.rock, color: 0x3f8f4f, flatShading: true, vertexColors: true }),
     );
     hill.position.y = def.h / 2 - 4;
     group.add(hill);
@@ -407,10 +567,23 @@ function islandMesh(def, rng, mats) {
     // The river: from the hill foot, winding west to the shore. Every point
     // is 35+ m from the strip centreline; the source pond sits outside the
     // hill foot so the ribbon never dives under the cone.
-    group.add(riverMesh([
+    // Round 9: 20 m wide (was 14 — invisible at a grazing camera angle)
+    // with a paler highlight ribbon down the middle, and a line of dark
+    // bank pines marking the corridor, so the river reads in the landing
+    // shot instead of only existing in the code.
+    const RIVER_POINTS = [
       [140, -300], [90, -200], [60, -100], [55, -10], [40, 80],
       [-40, 150], [-160, 220], [-300, 290], [-430, 350], [-480, 350],
-    ], 14));
+    ];
+    group.add(riverMesh(RIVER_POINTS, 20));
+    group.add(riverMesh(RIVER_POINTS, 8, 0x7cc4e8, 2.72, 0.55));
+    const RIVER_PINES = [[85, -120], [25, 60], [-130, 200], [-270, 270], [-410, 330]];
+    for (const [px, pz] of RIVER_PINES) {
+      const pine = makePine(rng8);
+      pine.scale.setScalar(0.9 + rng8() * 0.3);
+      pine.position.set(px, PLATEAU_TOP, pz);
+      group.add(pine);
+    }
     const pond = new THREE.Mesh(
       new THREE.CircleGeometry(26, 20),
       new THREE.MeshBasicMaterial({ color: 0x4aa8d8, transparent: true, opacity: 0.92 }),
@@ -481,9 +654,12 @@ function runwayMesh(def, label, mats) {
   // Round 7: the plane is 20 m wide (the full strip width) x 26 m tall
   // and sits 40 m past each threshold, so the digits are as large as the
   // strip allows and face the pilot on final instead of hiding mid-strip.
+  // Round 9: widened to 22 x 27.5 m — still inside the 26 m strip and
+  // clear of the edge stripes at ±11.5 m — and the landing shot stages
+  // closer, so "36" reads at a glance instead of only when hunted for.
   const numA = String(Math.round(((def.headingDeg + 360) % 360) / 10) || 36).padStart(2, '0');
   const numB = String(Math.round((((def.headingDeg + 180) % 360) / 10) || 36)).padStart(2, '0');
-  const numGeo = new THREE.PlaneGeometry(20, 26);
+  const numGeo = new THREE.PlaneGeometry(22, 27.5);
   for (const [num, z, flip] of [[numA, def.length / 2 - 40, 0], [numB, -(def.length / 2 - 40), Math.PI]]) {
     const holder = new THREE.Group();
     const face = new THREE.Mesh(
@@ -535,12 +711,20 @@ export function makeRing(radius = 20) {
 
 export function buildWorld(scene, seed = 1) {
   const rng = mulberry32(seed);
+  // Round 9: the new textures (rock, strata, ash, storm wall) are drawn
+  // from their OWN seeded stream — they must not consume the main rng, or
+  // every tree and cloud placed after them would move.
+  const texRng = mulberry32(0x9c0ffee);
   const world = { rings: [], clouds: [], islands: ISLANDS };
   const mats = {
     grass: grassTexture(rng),
     asphalt: asphaltTexture(rng),
     sand: sandTexture(rng),
     sea: seaShimmerTexture(rng),
+    rock: rockTexture(texRng),
+    strata: strataTexture(texRng),
+    ash: ashTexture(texRng),
+    stormWall: stormWallTexture(texRng),
   };
 
   // Late-afternoon sky, softened: a natural blue-to-gold gradient, not a
@@ -612,6 +796,15 @@ export function buildWorld(scene, seed = 1) {
   // the side the cover camera sees. The misty islands are plain pale
   // cones; the fog hazes them into silhouettes. All of it is static
   // geometry: built once, never touched per frame.
+  // Round 9: the volcano is ROCK now, not a green hill — banded vertex
+  // colours plus a strata texture (horizontal rock layers), a flared ash
+  // cap with a ragged rim that actually sticks out of the slope (the
+  // round-8 cap had the same slope as the cone, so it barely showed), and
+  // the lighthouse moved to the NORTH shoulder at (4030, 321, -482) and
+  // scaled up 1.4x: from the cover camera that puts it ~10 deg left of
+  // the ring's centre — peeking BESIDE the gold ring instead of hiding
+  // behind it. The lighthouse position is fixed (never rng-streamed), so
+  // the main rng stream is untouched.
   {
     const v = HERO_VOLCANO;
     const vGeo = new THREE.ConeGeometry(v.r, v.h, 14, 4);
@@ -628,17 +821,38 @@ export function buildWorld(scene, seed = 1) {
       }
       vGeo.computeVertexNormals();
     }
-    shadeCone(vGeo, v.h);
+    shadeVolcano(vGeo, v.h);
     const volcano = new THREE.Mesh(
       vGeo,
-      new THREE.MeshLambertMaterial({ color: 0x55684f, flatShading: true, vertexColors: true }),
+      // Round 9 fix pass: colour lightened 0x8a7d6e -> 0x9d8f7d — with
+      // the sun in the west, the camera-facing east slope only gets
+      // ambient light, and the darker rock read as a black pyramid.
+      new THREE.MeshLambertMaterial({ map: mats.strata, color: 0x9d8f7d, flatShading: true, vertexColors: true }),
     );
     volcano.position.set(v.x, v.h / 2 - 4, v.z);
     scene.add(volcano);
-    // Pale ash cap: a cone with the same slope, apex at the volcano apex.
+    // Pale ash cap: a cone with a STEEPER slope than the volcano itself
+    // (265/150 = 1.77 vs the cone's 1.54), so it flares 28 m out of the
+    // slope at its base instead of sinking into it; the rim is ragged
+    // (per-angle sine jitter, deterministic) so the ash edge is weather,
+    // not a drawn circle.
+    const capGeo = new THREE.ConeGeometry(265, 150, 16, 1);
+    {
+      const pos = capGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        if (y < -70) { // base rim only — the apex stays centred
+          const a = Math.atan2(pos.getZ(i), pos.getX(i));
+          const k = 1 + 0.10 * Math.sin(a * 5 + 1.3) + 0.06 * Math.sin(a * 9 + 0.7);
+          pos.setX(i, pos.getX(i) * k);
+          pos.setZ(i, pos.getZ(i) * k);
+        }
+      }
+      capGeo.computeVertexNormals();
+    }
     const cap = new THREE.Mesh(
-      new THREE.ConeGeometry(231, 150, 14, 1),
-      new THREE.MeshLambertMaterial({ color: 0xe8e2d4, flatShading: true }),
+      capGeo,
+      new THREE.MeshLambertMaterial({ map: mats.ash, color: 0xe8e2d4, flatShading: true }),
     );
     cap.position.set(v.x, v.h - 4 - 75, v.z);
     scene.add(cap);
@@ -664,9 +878,13 @@ export function buildWorld(scene, seed = 1) {
     vLagoon.position.set(v.x, 0.25, v.z);
     vLagoon.renderOrder = 1;
     scene.add(vLagoon);
-    // Lighthouse on the western shoulder (cone height there ~548 m): a
-    // white tower with a red band and roof, and a warm glow sprite at the
-    // lamp so the light reads even at 3.5 km.
+    // Lighthouse on the NORTH shoulder, ~500 m out from the axis (cone
+    // height there ~321 m): a white tower with a red band and roof, and a
+    // warm glow sprite at the lamp so the light reads even at 3.5 km.
+    // Round 9: moved here from the western shoulder (150 m out) and scaled
+    // up 1.4x — from the cover camera the old spot sat dead behind the
+    // gold ring; the north shoulder puts the lamp ~10 deg left of the
+    // ring's centre, peeking beside it instead of hiding behind it.
     const light = new THREE.Group();
     const tower = new THREE.Mesh(
       new THREE.CylinderGeometry(3.5, 4.5, 26, 8),
@@ -695,10 +913,14 @@ export function buildWorld(scene, seed = 1) {
     const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: glowTexture(), transparent: true, depthWrite: false, fog: false, opacity: 0.9,
     }));
-    lampGlow.scale.set(110, 110, 1);
+    // Round 9 fix pass: 110 -> 150 — at 3 km the lamp's glow is the only
+    // part of the lighthouse that reads; the first pass rendered as a
+    // faint dot beside the ring.
+    lampGlow.scale.set(150, 150, 1);
     lampGlow.position.y = 24;
     light.add(lampGlow);
-    light.position.set(v.x - 150, v.h * (1 - 150 / v.r) - 4, v.z + 30);
+    light.position.set(v.x + 130, 321, v.z - 482);
+    light.scale.setScalar(1.4);
     scene.add(light);
     // Misty islands: plain pale cones, no trees, no beach detail — the
     // fog turns them into distant silhouettes.
@@ -760,7 +982,12 @@ export function buildWorld(scene, seed = 1) {
   for (let i = 0; i < 22; i++) {
     const cloud = new THREE.Group();
     const isLow = i >= 18;
-    const puffs = 7 + Math.floor(rng() * 5);
+    // Round 9: 10-15 puffs (was 7-11) plus 2-3 small satellite wisps
+    // offset from the main mass in the most translucent materials, so the
+    // silhouette breaks up instead of closing into one hard ellipse; the
+    // puffs' vertical squash varies much more (0.35-1.0) so no two clouds
+    // share the same flat profile.
+    const puffs = 10 + Math.floor(rng() * 6);
     for (let p = 0; p < puffs; p++) {
       const isBase = p === 0;
       const isShadow = !isBase && p % 4 === 0;
@@ -771,16 +998,33 @@ export function buildWorld(scene, seed = 1) {
         cloudMats[isBase ? 1 : isShadow ? (rng() < 0.5 ? 2 : 4) : rng() < 0.25 ? 3 : 0],
       );
       puff.position.set(
-        (rng() - 0.5) * 170,
+        // Round 9 fix pass: spread widened (x ±85 -> ±130, z ±40 -> ±60)
+        // — the first pass still closed into flat ovals at distance
+        // because every puff sat inside one ellipse-sized footprint.
+        (rng() - 0.5) * 260,
         isBase ? 0 : isShadow ? -9 - rng() * 5 : isTower ? 14 + rng() * 10 : 3 + rng() * 12,
-        (rng() - 0.5) * 80,
+        (rng() - 0.5) * 120,
       );
       puff.scale.set(
         1.5 + rng() * 0.7,
-        isTower ? 0.9 + rng() * 0.3 : 0.5 + rng() * 0.3,
+        isTower ? 0.9 + rng() * 0.3 : 0.35 + rng() * 0.65,
         1.0 + rng() * 0.3,
       );
       cloud.add(puff);
+    }
+    // Satellite wisps: small, pale, far out — the cloud's edge dissolves
+    // instead of ending in a clean ellipse.
+    const wisps = 2 + Math.floor(rng() * 2);
+    for (let w = 0; w < wisps; w++) {
+      const s = 10 + rng() * 12;
+      const wisp = new THREE.Mesh(
+        new THREE.SphereGeometry(s, 8, 6),
+        cloudMats[rng() < 0.5 ? 3 : 4],
+      );
+      const side = rng() < 0.5 ? -1 : 1;
+      wisp.position.set(side * (95 + rng() * 45), -6 + rng() * 14, (rng() - 0.5) * 90);
+      wisp.scale.set(1.6 + rng() * 0.8, 0.4 + rng() * 0.3, 1.0);
+      cloud.add(wisp);
     }
     if (isLow) {
       const [lx, ly, lz] = lowCloudSpots[i - 18];
@@ -813,10 +1057,14 @@ export function buildWorld(scene, seed = 1) {
       new THREE.MeshBasicMaterial({ color: 0x2f3848, transparent: true, opacity: 0.96 }),
       new THREE.MeshBasicMaterial({ color: 0x6b7688, transparent: true, opacity: 0.9 }),
     ];
-    // A solid dark backplane so the wall reads as a front, not a row of puffs.
+    // A dark backplane so the wall reads as a front, not a row of puffs —
+    // but as an ALPHA silhouette with a ragged top edge and sides/bottom
+    // fading into haze (round 9: the round-8 flat rectangle showed its
+    // straight edges in the storm shot). The texture carries the shape;
+    // the plane itself is only a carrier.
     const back = new THREE.Mesh(
       new THREE.PlaneGeometry(2800, 750),
-      new THREE.MeshBasicMaterial({ color: 0x333e50, transparent: true, opacity: 0.6 }),
+      new THREE.MeshBasicMaterial({ map: mats.stormWall, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }),
     );
     back.rotation.y = -Math.PI / 2; // face west, toward the islands
     back.position.set(0, 380, 0);
@@ -827,6 +1075,17 @@ export function buildWorld(scene, seed = 1) {
       const puff = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 8), wallMats[i % 2]);
       puff.position.set((rng() - 0.5) * 160, 120 + rng() * 420, z);
       puff.scale.set(0.7 + rng() * 0.4, 0.55 + rng() * 0.35, 1.1 + rng() * 0.5);
+      stormWall.add(puff);
+    }
+    // Round 9: six more puffs at varied depths behind/in front of the
+    // backplane, so the wall has thickness instead of reading as a flat
+    // billboard with a row of balls glued to it.
+    for (let i = 0; i < 6; i++) {
+      const z = -1100 + i * 440 + (rng() - 0.5) * 90;
+      const s = 100 + rng() * 120;
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 8), wallMats[(i + 1) % 2]);
+      puff.position.set(-260 + rng() * 420, 200 + rng() * 380, z);
+      puff.scale.set(0.8 + rng() * 0.4, 0.6 + rng() * 0.3, 1.0 + rng() * 0.5);
       stormWall.add(puff);
     }
     // Lit rim on top: a few pale puffs catching the last sun.

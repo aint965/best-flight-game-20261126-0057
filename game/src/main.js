@@ -160,7 +160,11 @@ function updateCamera(dt) {
 // live timer and a real score, the way a player actually sees the game.
 function stageShot() {
   if (!SHOT) return;
-  const mission = SHOT === 'hop' ? getMission('hop') : getMission('rings');
+  const mission = SHOT === 'hop' ? getMission('hop') : SHOT === 'storm' ? getMission('storm') : getMission('rings');
+  // Round 9: the storm shot flies the Storm Courier sortie, so the wall
+  // is visible (main loop shows it only when missionId === 'storm') and
+  // the HUD STORM FRONT panel reads live.
+  if (SHOT === 'storm') missionId = 'storm';
   clearRings(scene, missionState);
   missionState = createMissionState(mission, SEED);
   buildRings(scene, missionState);
@@ -232,13 +236,29 @@ function stageShot() {
     // left frame edge to the centre, and the home hill (moved east and
     // lowered in round 7) sits at the right edge instead of dominating
     // the middle of the frame.
+    // Round 9: closer again — staged 300 m south, 38 m up (on the glide
+    // path: 85 - (1250 - 300) * 0.05 = 37.5), so at capture the plane sits
+    // ~50 m from the "36" numbers and they read at a glance; the strip
+    // still runs the full frame to the horizon, and the river crossing
+    // (z ≈ 0-80, 20 m wide now) sits mid-frame ahead, in the approach
+    // path instead of behind the camera.
     missionState.ringIndex = 1;
     missionState.score = 250;
     missionState.combo = 1;
     missionState.rings[0].visible = false;
-    flight.x = 70; flight.y = 34; flight.z = 360;
+    flight.x = 70; flight.y = 38; flight.z = 300;
     flight.heading = 0; flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
     flight.pitch = degToRad(0);
+  } else if (SHOT === 'storm') {
+    // Round 9: Storm Courier dossier shot — the plane cruises east at
+    // 200 m over the sea toward the dark wall, which fills the frame
+    // ahead; the volcano peeks at the left edge, the HUD STORM FRONT
+    // panel reads live (front distance + ETA counting down). The
+    // autopilot below holds a level east course — it never chases the
+    // courier rings, because this shot is about the front, not the rings.
+    flight.x = 2200; flight.y = 200; flight.z = -1400;
+    flight.heading = -Math.PI / 2; flight.speedKt = 120; flight.throttle = 68; flight.onGround = false;
+    flight.pitch = 0; flight.roll = 0;
   }
 }
 
@@ -257,6 +277,22 @@ function shotAutopilot(dt) {
       // otherwise give at level pitch, so V/S reads near zero.
       pitch: clamp(-flight.pitch * 3 - 0.1, -0.6, 0.6),
       roll: clamp(-flight.roll * 3, -1, 1),
+      yaw: 0,
+      brake: false,
+      throttleDelta: 0,
+    };
+  }
+  // Round 9: the storm shot holds a level east cruise toward the wall —
+  // heading -PI/2, 200 m — instead of chasing the courier rings. The
+  // rings stay in the mission (the HUD objective still tells the story),
+  // but the shot is about the front, and a banking turn toward ring 1
+  // would swing the wall out of frame within seconds.
+  if (SHOT === 'storm') {
+    const headingErr = wrapAngle(-Math.PI / 2 - flight.heading);
+    const desiredRoll = clamp(-headingErr * 1.4, -0.5, 0.5);
+    return {
+      pitch: clamp((200 - flight.y) / 60 - flight.pitch * 2, -0.6, 0.6),
+      roll: clamp((desiredRoll - flight.roll) * 2, -1, 1),
       yaw: 0,
       brake: false,
       throttleDelta: 0,

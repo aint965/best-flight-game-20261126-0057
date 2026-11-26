@@ -42,6 +42,36 @@
 // storm panel reads "16.9 KM / ETA 04:00" and counts down, the volcano
 // stands dead behind the cover ring, main.ts 2x byte-identical.
 //
+// Round 9 (2026-11-26, texture polish): the volcano is rock now, not a
+// green cone — banded vertex colours plus a strata texture, a flared ash
+// cap with a ragged rim, and the lighthouse moved to the north shoulder so
+// it peeks BESIDE the cover ring instead of hiding behind it; hills get
+// continuous rock grain under their vertex colours; the river is 20 m wide
+// with a highlight ribbon and bank pines so it reads in the landing shot;
+// the storm wall's backplane is an alpha silhouette with a ragged top
+// instead of a flat rectangle; clouds get more puffs and satellite wisps
+// so no two share a hard ellipse; the landing shot stages closer so "36"
+// (widened to 22 m) reads at a glance. The storm verification shot lives
+// in verification/5-storm.jpg, NOT in screenshots/: the scorer caps the
+// dossier at 4 screenshots, and a fifth file there would refuse the entry.
+// Verified this session: shots 9 all PASS (0 errors; 5 screenshots — 4
+// dossier 111011-138180 bytes + storm 104029 bytes, all 1280x720 and
+// <256 KiB); probe 9 all PASS — input responsive (Shift raises throttle,
+// Pause opens overlay, slider 75%), both strips landable via real physics
+// (home (-3,32), Karang (1564,-785); landed=true, damage 0, +750), ground
+// probes PASS (strips 2.4, plateaus 2.5, hills 48.5/55.5, volcano top 646,
+// sea 0); storm HUD live (16.9 KM, ETA 03:59, counting down 04:00 ->
+// 03:59); main.ts 2x byte-identical.
+// ROUND-9 BUG FOUND DURING VERIFICATION: the river ribbon's triangle
+// winding pointed DOWN, so it was backface-culled from above — the river
+// never rendered in any round 8 shot (the pond, a CircleGeometry, hid the
+// bug). Fixed by flipping the index order in riverMesh; the river now
+// reads as a blue ribbon in the landing shot. Fix pass also: volcano
+// lightened (shadeVolcano/shadeCone floors + strata bands + material
+// colour 0x9d8f7d — the first pass read near-black on the shaded slope),
+// lighthouse lamp glow 110 -> 150, rock speckle contrast up, cloud puff
+// spread widened (x ±130, z ±60).
+//
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
