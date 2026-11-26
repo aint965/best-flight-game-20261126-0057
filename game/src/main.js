@@ -93,6 +93,11 @@ function endSortie(win, title, lines) {
 // --- Camera -----------------------------------------------------------------
 const camPos = new THREE.Vector3(0, 200, 900);
 const camLook = new THREE.Vector3(0, 100, 0);
+// Where the chase camera is heading (test hook: the screenshot driver waits
+// for the camera to settle there before capturing, so shots are framed the
+// way a player sees them instead of mid-lerp from the spawn point).
+const camGoal = new THREE.Vector3();
+let camGoalSet = false;
 function updateCamera(dt) {
   const fwd = new THREE.Vector3(-Math.sin(flight.heading), 0, -Math.cos(flight.heading));
   const up = new THREE.Vector3(0, 1, 0);
@@ -110,6 +115,8 @@ function updateCamera(dt) {
     desired = planePos.clone().addScaledVector(fwd, -21).add(new THREE.Vector3(0, 6, 0));
     look = planePos.clone().addScaledVector(fwd, 60).add(new THREE.Vector3(0, 4, 0));
   }
+  camGoal.copy(desired);
+  camGoalSet = true;
   const k = 1 - Math.exp(-dt * (mode === 'title' ? 1.2 : 5));
   camPos.lerp(desired, k);
   camLook.lerp(look, 1 - Math.exp(-dt * 7));
@@ -121,9 +128,11 @@ function updateCamera(dt) {
 }
 
 // --- Shot modes: deterministic staged scenes, no input needed ---------------
+// Every shot stages a MID-SORTIE moment, not a cold start: the HUD reads a
+// live timer and a real score, the way a player actually sees the game.
 function stageShot() {
   if (!SHOT) return;
-  const mission = getMission('rings');
+  const mission = SHOT === 'hop' ? getMission('hop') : getMission('rings');
   clearRings(scene, missionState);
   missionState = createMissionState(mission, SEED);
   buildRings(scene, missionState);
@@ -138,17 +147,40 @@ function stageShot() {
   mode = 'flying';
   showOverlay(null);
   if (SHOT === 'cruise') {
-    // Approaching from the south-west, close to ring 1: the ring reads big,
-    // Pulau Karang's runway is ahead-right, home island below.
-    flight.x = 200; flight.y = 175; flight.z = 0;
-    flight.heading = degToRad(-15); flight.speedKt = 125; flight.throttle = 68; flight.onGround = false;
+    // Cover: ring 1 already banked (+250 pts), ring 2 big ahead at ~210 m —
+    // the ring reads at a glance, Pulau Karang's island sits ahead-right.
+    missionState.ringIndex = 1;
+    missionState.score = 250;
+    missionState.combo = 1;
+    missionState.rings[0].visible = false;
+    const ring = missionState.rings[1];
+    flight.x = 550; flight.y = 185; flight.z = -950;
+    flight.speedKt = 125; flight.throttle = 68; flight.onGround = false;
+    flight.heading = Math.atan2(-(ring.position.x - flight.x), -(ring.position.z - flight.z));
+  } else if (SHOT === 'hop') {
+    // Island Hop, second leg: home strip already landed (+750 pts), now on
+    // final approach to Pulau Karang's strip from the south-east, low and
+    // descending — a different mission, a different angle, a different sky.
+    missionState.landingsDone = ['home'];
+    missionState.score = 750;
+    flight.x = 1754; flight.y = 110; flight.z = 244;
+    flight.heading = degToRad(25); flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
+    flight.pitch = degToRad(-3);
   } else if (SHOT === 'rings') {
+    // Fly-through: close behind ring 1 (~175 m) so the driver catches the
+    // pass itself — score ticks to 250 and the toast fires in the shot.
     const ring = missionState.rings[0];
-    flight.x = ring.position.x + 60; flight.y = ring.position.y + 6; flight.z = ring.position.z + 260;
-    flight.heading = 0; flight.speedKt = 130; flight.throttle = 72; flight.onGround = false;
+    flight.x = ring.position.x + 30; flight.y = ring.position.y + 6; flight.z = ring.position.z + 175;
+    flight.speedKt = 130; flight.throttle = 72; flight.onGround = false;
     // Aim straight at the ring so the shot catches the fly-through.
     flight.heading = Math.atan2(-(ring.position.x - flight.x), -(ring.position.z - flight.z));
   } else if (SHOT === 'landing') {
+    // Home-strip final: one ring already banked (+250 pts), gear down in
+    // spirit, descending on the lit runway.
+    missionState.ringIndex = 1;
+    missionState.score = 250;
+    missionState.combo = 1;
+    missionState.rings[0].visible = false;
     flight.x = 60; flight.y = 85; flight.z = 1250;
     flight.heading = 0; flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
     flight.pitch = degToRad(-4);
@@ -161,9 +193,22 @@ function shotAutopilot(dt) {
   const target = nextTarget(missionState);
   const desiredHeading = Math.atan2(-(target.x - flight.x), -(target.z - flight.z));
   const headingErr = wrapAngle(desiredHeading - flight.heading);
-  const desiredRoll = clamp(headingErr * 1.4, -0.5, 0.5);
+  // Roll sign: a LEFT bank (roll < 0) turns the nose LEFT, which in this
+  // heading convention means heading INCREASES (turnRate = -sin(roll) * k).
+  // So when the target sits to the left (headingErr < 0, heading must
+  // decrease), the bank must be RIGHT (roll > 0) — the opposite sign from
+  // headingErr. (The first version had this backwards: the plane banked
+  // hard away from every ring after passing one.)
+  const desiredRoll = clamp(-headingErr * 1.4, -0.5, 0.5);
   const rollErr = desiredRoll - flight.roll;
-  const altTarget = SHOT === 'landing' ? Math.max(20, 85 - (1250 - flight.z) * 0.05) : (SHOT === 'rings' ? 156 : 170);
+  // Hold a steady glide path on approaches: the hop final descends on a
+  // fixed slope toward the strip instead of levelling off at cruise height.
+  // On ring sorties, hold the next ring's height so the plane flies through
+  // the ring's centre instead of grazing its lower edge.
+  const hDist = Math.hypot(target.x - flight.x, target.z - flight.z);
+  const altTarget = SHOT === 'landing' ? Math.max(20, 85 - (1250 - flight.z) * 0.05)
+    : SHOT === 'hop' ? clamp(hDist * 0.16, 15, 110)
+    : (SHOT === 'rings' || SHOT === 'cruise' ? target.y + 6 : 170);
   const altErr = clamp((altTarget - flight.y) / 60, -0.4, 0.4);
   return {
     pitch: clamp(altErr - flight.pitch * 2, -0.6, 0.6),
@@ -259,7 +304,7 @@ function frame(now) {
     let stick;
     if (SHOT) {
       stick = shotAutopilot(dt);
-      flight.throttle = SHOT === 'landing' ? 42 : SHOT === 'rings' ? 72 : 68;
+      flight.throttle = SHOT === 'landing' || SHOT === 'hop' ? 42 : SHOT === 'rings' ? 72 : 68;
     } else {
       stick = {
         pitch: input.pitch,
@@ -341,6 +386,7 @@ function frame(now) {
       score: missionState.score,
       bestScore,
       timeLeft: missionState.timeLeft,
+      elapsedSec: timeSec,
       objectiveText: objectiveText(missionState),
       rings: missionState.rings,
       nextRingIndex: missionState.ringIndex,
@@ -370,6 +416,11 @@ window.__game = {
   get flight() { return flight; },
   get mission() { return missionState; },
   get shot() { return SHOT; },
+  // True once the chase camera has converged on its staged framing. The
+  // goal moves with the plane, so the camera trails it by a steady ~11 m
+  // (22% of the gap closed per 0.05 s frame against ~3 m of forward motion
+  // per frame) — 15 m is the converged band, not 0.
+  get camSettled() { return camGoalSet && camera.position.distanceTo(camGoal) < 15; },
   startMission,
   version: 'langit-nusantara-1.0',
 };

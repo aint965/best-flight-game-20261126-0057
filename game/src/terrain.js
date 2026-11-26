@@ -179,10 +179,12 @@ export function buildWorld(scene, seed = 1) {
   sunDisc.lookAt(0, 300, 0);
   scene.add(sunDisc);
 
-  // Sea: big flat plane with a warm blue.
+  // Sea: big flat plane with a warm blue. Phong, not Lambert, so the low
+  // sun throws a real specular glitter path across the water instead of a
+  // dead flat fill — the cheapest way to make the sea read as sea.
   const sea = new THREE.Mesh(
     new THREE.PlaneGeometry(16000, 16000),
-    new THREE.MeshLambertMaterial({ color: 0x2478a8 }),
+    new THREE.MeshPhongMaterial({ color: 0x2478a8, shininess: 90, specular: 0x9fc4dd }),
   );
   sea.rotation.x = -Math.PI / 2;
   sea.position.y = 0;

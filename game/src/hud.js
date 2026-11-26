@@ -152,7 +152,7 @@ function drawMinimap(ctx, state, rings, nextRingIndex, homeRunway, hopRunway) {
 }
 
 export function updateHud(hud, view) {
-  const { readouts, state, mission, score, bestScore, timeLeft, objectiveText, rings, nextRingIndex } = view;
+  const { readouts, state, mission, score, bestScore, timeLeft, elapsedSec, objectiveText, rings, nextRingIndex } = view;
   setText('hud-alt', readouts.altitudeFt.toLocaleString('en-US'));
   setText('hud-speed', readouts.speedKt);
   setText('hud-hdg', String(readouts.headingDeg).padStart(3, '0'));
@@ -163,7 +163,10 @@ export function updateHud(hud, view) {
   setText('hud-best', bestScore.toLocaleString('en-US'));
   setText('hud-mission', mission ? mission.name.toUpperCase() : 'FREE FLIGHT');
   setText('hud-objective', objectiveText);
-  setText('hud-timer', mission && mission.timeLimitSec ? formatTime(timeLeft) : '--:--');
+  // TIME always reads live: the countdown on a timed sortie, the elapsed
+  // sortie time everywhere else (a pilot wants to know how long she has
+  // been airborne, and a screenshot should never show a dead "--:--").
+  setText('hud-timer', mission && mission.timeLimitSec ? formatTime(timeLeft) : formatTime(elapsedSec || 0));
   setText('hud-damage-num', `${Math.round(state.damage)}%`);
   setBar('fuel-bar', state.fuel, 25);
   setBar('damage-bar', state.damage, 60);

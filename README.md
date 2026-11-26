@@ -27,8 +27,8 @@ and a clock turning every sortie into decisions.
   timer and a minimap with a direction arrow to the next ring or runway.
 - **Sound, all synthesised** (WebAudio, no audio files): engine hum tied to throttle,
   wind, ring chimes, touchdown thud and crash.
-- **Deterministic screenshot modes**: `?shot=start|cruise|rings|landing&seed=1`
-  stages a fixed scene with no input needed.
+- **Deterministic screenshot modes**: `?shot=start|cruise|hop|rings|landing&seed=1`
+  stages a fixed mid-sortie scene with no input needed (live timer, real score).
 
 ## Controls
 
