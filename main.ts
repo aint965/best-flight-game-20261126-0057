@@ -10,6 +10,15 @@
 // procedural asphalt/grass/sand textures, painted runway numbers, a natural
 // blue-to-gold sky and a soft contact shadow under the plane.
 //
+// Round 6 (2026-11-26): framing only, no world changes — the hop shot flies
+// a parallel offset pass 200 m west of the Karang strip so the whole runway
+// reads beside the fuselage; the landing shot stages 450 m out so the home
+// strip is the big subject; the rings shot holds wings level for 2 s after
+// a pass so the capture catches a level aeroplane with score + toast.
+// Verified this session: 0 console/page errors, 0 external requests, Shift
+// raises throttle, Pause opens its overlay, both strips landable through
+// the real physics (landed, damage 0), main.ts 2x byte-identical.
+//
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts

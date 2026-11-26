@@ -63,6 +63,10 @@ try { bestScore = Number(window.localStorage.getItem('langit-nusantara-best') ||
 let timeSec = 0;
 let toastUntil = 0;
 let toastText = '';
+// Round 6: sim time of the last ring pass — the rings-shot autopilot holds
+// wings level for a while after a pass so the capture at the pass itself
+// catches a level aeroplane, not one already banking hard at the next ring.
+let lastRingPassSec = -100;
 
 function showToast(text, seconds = 2.5) {
   toastText = text;
@@ -183,17 +187,17 @@ function stageShot() {
     flight.heading = Math.atan2(-(ring.position.x - flight.x), -(ring.position.z - flight.z));
   } else if (SHOT === 'hop') {
     // Island Hop, second leg: home strip already landed (+750 pts), now on
-    // final approach to Pulau Karang's strip from the south-east, low and
+    // final approach to Pulau Karang's strip from the north-east, low and
     // descending — a different mission, a different angle, a different sky.
-    // The strip sits in the middle of the island's grass plateau now (land
-    // on every side), so the plane starts south-east of the island, ~680 m
-    // out, staged ~75 m to the pilot's own right of the centreline so the
-    // lit strip reads BESIDE the fuselage instead of hiding behind it (the
-    // autopilot still curves the plane back toward the strip, but the
-    // capture happens before it has closed the offset).
+    // Round 6: the plane flies a parallel offset pass 200 m WEST of the
+    // strip (the hill is on the east side), on the same heading as the
+    // strip, so the whole lit strip — markings, numbers, edge lights —
+    // reads BESIDE the fuselage instead of hiding behind it. The autopilot
+    // aims at the offset point (see shotAutopilot), so the offset survives
+    // to the capture instead of curving back to the centreline.
     missionState.landingsDone = ['home'];
     missionState.score = 750;
-    flight.x = 1850; flight.y = 110; flight.z = -320;
+    flight.x = 1606; flight.y = 110; flight.z = -199;
     flight.heading = degToRad(25); flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
     flight.pitch = degToRad(-3);
   } else if (SHOT === 'rings') {
@@ -207,20 +211,53 @@ function stageShot() {
   } else if (SHOT === 'landing') {
     // Home-strip final: one ring already banked (+250 pts), gear down in
     // spirit, descending on the lit runway.
+    // Round 6: staged CLOSE — 450 m south of the strip centre, 45 m up,
+    // 150 m east of the centreline, sitting on the glide path the
+    // autopilot below already encodes (85 - (1250 - z) * 0.05 = 45 at
+    // z = 450). The strip is now the big subject of the frame, its
+    // threshold, markings and "36" clear beside the nose instead of a
+    // small strip 1.2 km away.
     missionState.ringIndex = 1;
     missionState.score = 250;
     missionState.combo = 1;
     missionState.rings[0].visible = false;
-    flight.x = 60; flight.y = 85; flight.z = 1250;
+    flight.x = 150; flight.y = 45; flight.z = 450;
     flight.heading = 0; flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
-    flight.pitch = degToRad(-4);
+    flight.pitch = degToRad(0);
   }
 }
 
 // Autopilot for shot modes: hold a steady, good-looking flight path.
 function shotAutopilot(dt) {
   if (!SHOT || SHOT === 'start') return { pitch: 0, roll: 0, yaw: 0, brake: false, throttleDelta: 0 };
-  const target = nextTarget(missionState);
+  // Round 6: for 2 s after a ring pass, hold wings level and hold altitude
+  // instead of banking hard toward the next ring. The screenshot driver
+  // captures right at the pass (score ticks, toast fires), and the old code
+  // caught the plane mid-bank toward ring 2 (roll ~30 deg, V/S +1400 fpm).
+  // The toast lives 2.5 s, so the capture still shows score + toast — now
+  // with a level aeroplane centred in the gold ring.
+  if (SHOT === 'rings' && timeSec - lastRingPassSec < 2) {
+    return {
+      // A touch of nose-down cancels the climb the 72% throttle would
+      // otherwise give at level pitch, so V/S reads near zero.
+      pitch: clamp(-flight.pitch * 3 - 0.1, -0.6, 0.6),
+      roll: clamp(-flight.roll * 3, -1, 1),
+      yaw: 0,
+      brake: false,
+      throttleDelta: 0,
+    };
+  }
+  let target = nextTarget(missionState);
+  // Round 6: the hop shot flies a parallel offset pass 200 m west of the
+  // Karang strip, so the autopilot aims at the offset point (200 m west of
+  // the strip centre: 1500 - 200*cos(25 deg), -900 + 200*sin(25 deg)), not
+  // at the strip itself — otherwise it curves back to the centreline and
+  // the strip ends up hiding behind the fuselage again.
+  if (SHOT === 'hop') target = { x: 1319, y: 60, z: -815, kind: 'runway', runway: HOP_RUNWAY };
+  // Round 6: the landing shot holds its offset course straight at a point
+  // beyond the home strip on the same easting, instead of turning toward
+  // ring 2 — the strip stays big and whole beside the nose.
+  if (SHOT === 'landing') target = { x: 150, y: 60, z: -1000, kind: 'runway', runway: HOME_RUNWAY };
   const desiredHeading = Math.atan2(-(target.x - flight.x), -(target.z - flight.z));
   const headingErr = wrapAngle(desiredHeading - flight.heading);
   // Roll sign: a LEFT bank (roll < 0) turns the nose LEFT, which in this
@@ -351,6 +388,7 @@ function frame(now) {
     stepFlight(flight, stick, dt);
     updateMission(missionState, flight, dt, timeSec, {
       onRing: (n, gained, combo) => {
+        lastRingPassSec = timeSec;
         playRingChime(audio);
         showToast(`Ring ${n} — +${gained} pts${combo > 1 ? ` (combo x${combo})` : ''}`);
       },
