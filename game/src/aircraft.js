@@ -4,10 +4,12 @@ import * as THREE from 'three';
 
 export function buildAircraft() {
   const plane = new THREE.Group();
-  const paint = new THREE.MeshLambertMaterial({ color: 0xe8542f, flatShading: true }); // warm coral-red
-  const cream = new THREE.MeshLambertMaterial({ color: 0xfff3dd, flatShading: true });
-  const dark = new THREE.MeshLambertMaterial({ color: 0x2e3440, flatShading: true });
-  const metal = new THREE.MeshLambertMaterial({ color: 0x9aa5b1, flatShading: true });
+  // Phong, not Lambert: a real paint job catches a highlight from the low
+  // sun instead of shading flat like a cartoon.
+  const paint = new THREE.MeshPhongMaterial({ color: 0xe8542f, shininess: 55, specular: 0x7a2a18, flatShading: true }); // warm coral-red
+  const cream = new THREE.MeshPhongMaterial({ color: 0xfff3dd, shininess: 35, specular: 0x555544, flatShading: true });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x2e3440, shininess: 30, specular: 0x222222, flatShading: true });
+  const metal = new THREE.MeshPhongMaterial({ color: 0x9aa5b1, shininess: 80, specular: 0x666666, flatShading: true });
 
   // Fuselage: tapered cylinder pointing forward (-Z is forward in our flight model).
   const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.5, 7.4, 10), paint);
@@ -19,10 +21,10 @@ export function buildAircraft() {
   nose.rotation.x = Math.PI / 2;
   nose.position.set(0, 0.2, -4.2);
   plane.add(nose);
-  // Canopy: glossy dark bubble.
+  // Canopy: glossy dark bubble — high shininess so it reads as glass.
   const canopy = new THREE.Mesh(
     new THREE.SphereGeometry(1.05, 12, 8),
-    new THREE.MeshLambertMaterial({ color: 0x22384f, flatShading: true }),
+    new THREE.MeshPhongMaterial({ color: 0x1d3247, shininess: 130, specular: 0xaaccff, flatShading: true }),
   );
   canopy.scale.set(0.95, 0.75, 1.7);
   canopy.position.set(0, 1.15, -0.9);
@@ -34,6 +36,14 @@ export function buildAircraft() {
   const wingStripe = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.34, 0.5), paint);
   wingStripe.position.set(0, 1.05, -1.2);
   plane.add(wingStripe);
+  // Wing struts: the diagonal braces every bush plane has — they give the
+  // high wing its structure and stop it reading as a flat slab.
+  for (const side of [-1, 1]) {
+    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 3.9, 6), metal);
+    strut.position.set(side * 2.8, 0.38, -0.4);
+    strut.rotation.z = -side * 1.26;
+    plane.add(strut);
+  }
   // Tail: horizontal stabiliser + vertical fin.
   const tailWing = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.24, 1.5), cream);
   tailWing.position.set(0, 0.55, 3.4);
@@ -55,6 +65,15 @@ export function buildAircraft() {
   prop.add(bladeB);
   prop.position.set(0, 0.2, -5.15);
   plane.add(prop);
+  // Prop blur disc: a faint translucent disc that appears once the engine is
+  // turning fast, the way a spinning propeller reads in real life.
+  const propDisc = new THREE.Mesh(
+    new THREE.CircleGeometry(3.3, 24),
+    new THREE.MeshBasicMaterial({ color: 0x1a1d22, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  propDisc.position.set(0, 0.2, -5.2);
+  propDisc.visible = false;
+  plane.add(propDisc);
   // Fixed landing gear: two wheels + struts.
   for (const side of [-1, 1]) {
     const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.6, 6), metal);
@@ -90,6 +109,7 @@ export function buildAircraft() {
   plane.add(landingLight);
 
   plane.userData.propeller = prop;
+  plane.userData.propDisc = propDisc;
   plane.userData.navLights = navLights;
   return plane;
 }
@@ -98,6 +118,11 @@ export function buildAircraft() {
 export function animateAircraft(plane, throttle, timeSec, dt) {
   const prop = plane.userData.propeller;
   if (prop) prop.rotation.z += dt * (4 + throttle * 0.55);
+  const disc = plane.userData.propDisc;
+  if (disc) {
+    disc.visible = throttle > 25;
+    disc.material.opacity = 0.05 + throttle * 0.0006;
+  }
   const blink = Math.sin(timeSec * 4) > 0;
   for (const lamp of plane.userData.navLights) lamp.visible = blink || lamp === plane.userData.navLights[2];
 }

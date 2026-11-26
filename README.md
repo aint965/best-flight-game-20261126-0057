@@ -11,10 +11,13 @@ and a clock turning every sortie into decisions.
 
 ## The game
 
-- **3D chase view** (Three.js, vendored under `game/vendor/`): low-poly islands with
-  sandy beaches and palm trees, a lit home runway, drifting clouds, a low sun and a
-  warm gradient sky. The plane banks into turns, its propeller spins and its
-  navigation lights blink.
+- **3D chase view** (Three.js, vendored under `game/vendor/`): textured grass
+  plateaus with mottled procedural turf, asphalt island runways with centreline,
+  threshold, touchdown-zone markings, painted numbers and edge lights, layered
+  palm trees, a shallow lagoon ring around each island, drifting clouds, a low
+  sun with a soft glow and a natural blue-to-gold gradient sky. The plane banks
+  into turns, its propeller spins and blurs, its navigation lights blink, and a
+  soft contact shadow follows it over land and sea.
 - **Flight model**: pitch, roll and yaw with lift tied to speed, a stall below flying
   speed, gentle auto-coordination in turns, crosswind on the storm sortie, and
   terrain/water collision. Hard landings damage the airframe; soft landings on a

@@ -5,11 +5,16 @@
 // this file to /output and writes /output/dossier.json, the summary the judge
 // reads, with the vendored make.fun library.
 //
+// Round 5 (2026-11-26): both runways now sit on flat grass plateaus in the
+// middle of their islands — land on every side, never on the sea — with
+// procedural asphalt/grass/sand textures, painted runway numbers, a natural
+// blue-to-gold sky and a soft contact shadow under the plane.
+//
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -24,6 +29,14 @@ if (!existsSync(join(here, 'game', 'index.html'))) {
 }
 if (!existsSync(join(here, 'screenshots'))) {
   throw new Error('main.ts: screenshots/ is missing — take the screenshots first');
+}
+// Round 5: refuse an entry whose screenshots would trip the scorer's cap
+// (4 max, 256 KiB each) instead of handing in a doomed /output.
+for (const f of readdirSync(join(here, 'screenshots'))) {
+  const size = statSync(join(here, 'screenshots', f)).size;
+  if (size > 262144) {
+    throw new Error(`main.ts: screenshots/${f} is ${size} bytes — over the 256 KiB cap`);
+  }
 }
 
 mkdirSync(out, { recursive: true });

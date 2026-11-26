@@ -2,7 +2,7 @@
 // One job: wire every module together and run the game.
 import * as THREE from 'three';
 import { FLIGHT, MISSIONS, clamp, lerp, wrapAngle, degToRad, radToDeg } from './config.js';
-import { buildWorld, HOME_RUNWAY, HOP_RUNWAY } from './terrain.js';
+import { buildWorld, HOME_RUNWAY, HOP_RUNWAY, groundHeightAt } from './terrain.js';
 import { buildAircraft, animateAircraft } from './aircraft.js';
 import { createFlightState, stepFlight, flightReadouts } from './physics.js';
 import { createInput, bindInput, pollInput } from './input.js';
@@ -24,6 +24,30 @@ const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerH
 const world = buildWorld(scene, SEED);
 const plane = buildAircraft();
 scene.add(plane);
+
+// Soft contact shadow under the plane: a radial-gradient blob that follows
+// the aircraft at ground level, fading and widening with altitude. Real
+// shadow maps over a 4 km archipelago would be blocky; this is the cheap,
+// honest way a low sun throws a shadow under a bush plane.
+const blobShadow = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+  grad.addColorStop(0, 'rgba(12, 22, 32, 0.55)');
+  grad.addColorStop(1, 'rgba(12, 22, 32, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(17, 11),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.renderOrder = 2;
+  scene.add(mesh);
+  return mesh;
+})();
 
 // --- State ------------------------------------------------------------------
 const flight = createFlightState();
@@ -161,13 +185,15 @@ function stageShot() {
     // Island Hop, second leg: home strip already landed (+750 pts), now on
     // final approach to Pulau Karang's strip from the south-east, low and
     // descending — a different mission, a different angle, a different sky.
-    // Staged ~75 m to the plane's own right of the centreline so the lit
-    // strip reads BESIDE the fuselage instead of hiding behind it (the
+    // The strip sits in the middle of the island's grass plateau now (land
+    // on every side), so the plane starts south-east of the island, ~680 m
+    // out, staged ~75 m to the pilot's own right of the centreline so the
+    // lit strip reads BESIDE the fuselage instead of hiding behind it (the
     // autopilot still curves the plane back toward the strip, but the
     // capture happens before it has closed the offset).
     missionState.landingsDone = ['home'];
     missionState.score = 750;
-    flight.x = 1822; flight.y = 110; flight.z = 212;
+    flight.x = 1850; flight.y = 110; flight.z = -320;
     flight.heading = degToRad(25); flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
     flight.pitch = degToRad(-3);
   } else if (SHOT === 'rings') {
@@ -359,6 +385,13 @@ function frame(now) {
   plane.position.set(flight.x, flight.y, flight.z);
   plane.rotation.set(flight.pitch, flight.heading, flight.roll, 'YXZ');
   animateAircraft(plane, flight.throttle, timeSec, dt);
+  // Contact shadow: track the plane at ground level, fading with height.
+  const shadowGround = groundHeightAt(flight.x, flight.z);
+  const heightAbove = Math.max(0, flight.y - shadowGround);
+  blobShadow.position.set(flight.x, shadowGround + 0.5, flight.z);
+  const shadowScale = 1 + heightAbove * 0.004;
+  blobShadow.scale.set(shadowScale, shadowScale, 1);
+  blobShadow.material.opacity = clamp(0.9 - heightAbove / 160, 0.12, 0.9);
 
   // Rings spin gently; clouds drift.
   for (const ring of missionState.rings) ring.rotation.z += dt * 0.25;
@@ -425,6 +458,9 @@ window.__game = {
   // (22% of the gap closed per 0.05 s frame against ~3 m of forward motion
   // per frame) — 15 m is the converged band, not 0.
   get camSettled() { return camGoalSet && camera.position.distanceTo(camGoal) < 15; },
+  // Verification hook: ground height at any point (used to prove the strips
+  // sit on land, not water, and that a landing is physically possible).
+  groundAt: (x, z) => groundHeightAt(x, z),
   startMission,
   version: 'langit-nusantara-1.0',
 };
