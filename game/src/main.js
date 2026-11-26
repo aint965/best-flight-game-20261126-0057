@@ -195,9 +195,13 @@ function stageShot() {
     // reads BESIDE the fuselage instead of hiding behind it. The autopilot
     // aims at the offset point (see shotAutopilot), so the offset survives
     // to the capture instead of curving back to the centreline.
+    // Round 7: the offset is 86 m, not 200 m, and the plane stages 258 m
+    // along-track south-east of the strip centre — at capture the strip
+    // spans the right half of the frame 150-400 m out, its "03" number
+    // ~165 m from the camera instead of a distant strip 600 m away.
     missionState.landingsDone = ['home'];
     missionState.score = 750;
-    flight.x = 1606; flight.y = 110; flight.z = -199;
+    flight.x = 1586; flight.y = 85; flight.z = -512;
     flight.heading = degToRad(25); flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
     flight.pitch = degToRad(-3);
   } else if (SHOT === 'rings') {
@@ -217,11 +221,17 @@ function stageShot() {
     // z = 450). The strip is now the big subject of the frame, its
     // threshold, markings and "36" clear beside the nose instead of a
     // small strip 1.2 km away.
+    // Round 7: closer still — staged 360 m south, 34 m up, 70 m east of
+    // the centreline, so at capture (~80 m of travel in) the plane sits
+    // ~130 m from the "36" numbers, the strip runs diagonally from the
+    // left frame edge to the centre, and the home hill (moved east and
+    // lowered in round 7) sits at the right edge instead of dominating
+    // the middle of the frame.
     missionState.ringIndex = 1;
     missionState.score = 250;
     missionState.combo = 1;
     missionState.rings[0].visible = false;
-    flight.x = 150; flight.y = 45; flight.z = 450;
+    flight.x = 70; flight.y = 34; flight.z = 360;
     flight.heading = 0; flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
     flight.pitch = degToRad(0);
   }
@@ -253,11 +263,14 @@ function shotAutopilot(dt) {
   // the strip centre: 1500 - 200*cos(25 deg), -900 + 200*sin(25 deg)), not
   // at the strip itself — otherwise it curves back to the centreline and
   // the strip ends up hiding behind the fuselage again.
-  if (SHOT === 'hop') target = { x: 1319, y: 60, z: -815, kind: 'runway', runway: HOP_RUNWAY };
+  // Round 7: the offset is 86 m west (1500 - 86*cos(25 deg),
+  // -900 + 86*sin(25 deg)) — the strip stays big beside the fuselage.
+  if (SHOT === 'hop') target = { x: 1422, y: 60, z: -864, kind: 'runway', runway: HOP_RUNWAY };
   // Round 6: the landing shot holds its offset course straight at a point
   // beyond the home strip on the same easting, instead of turning toward
   // ring 2 — the strip stays big and whole beside the nose.
-  if (SHOT === 'landing') target = { x: 150, y: 60, z: -1000, kind: 'runway', runway: HOME_RUNWAY };
+  // Round 7: same easting as the new staging (x = 70).
+  if (SHOT === 'landing') target = { x: 70, y: 60, z: -1000, kind: 'runway', runway: HOME_RUNWAY };
   const desiredHeading = Math.atan2(-(target.x - flight.x), -(target.z - flight.z));
   const headingErr = wrapAngle(desiredHeading - flight.heading);
   // Roll sign: a LEFT bank (roll < 0) turns the nose LEFT, which in this

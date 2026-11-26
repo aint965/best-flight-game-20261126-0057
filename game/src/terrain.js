@@ -8,8 +8,8 @@ import { mulberry32, degToRad, clamp } from './config.js';
 // strip (with a hill offset to one side), so every runway sits on land, far
 // from the water — never on a causeway over the sea.
 export const ISLANDS = [
-  { x: 0, z: 0, r: 620, h: 90, runway: true, name: 'Pulau Rumah', hill: { dx: 300, dz: -120, r: 260, h: 70 } },
-  { x: 1500, z: -900, r: 420, h: 120, runway: true, name: 'Pulau Karang', hill: { dx: 220, dz: -100, r: 176, h: 84 } },
+  { x: 0, z: 0, r: 620, h: 90, runway: true, name: 'Pulau Rumah', hill: { dx: 340, dz: -220, r: 190, h: 48 } },
+  { x: 1500, z: -900, r: 420, h: 120, runway: true, name: 'Pulau Karang', hill: { dx: 220, dz: -120, r: 150, h: 55 } },
   { x: -1300, z: -1100, r: 380, h: 70, runway: false, name: 'Pulau Kelapa' },
   { x: 900, z: 1400, r: 300, h: 55, runway: false, name: 'Pulau Pasir' },
   { x: -1700, z: 900, r: 460, h: 140, runway: false, name: 'Pulau Gunung' },
@@ -106,25 +106,38 @@ function glowTexture() {
 }
 
 function numberTexture(text) {
+  // Round 7: runway numbers must read from the chase camera 130-170 m out,
+  // where a flat-painted digit is crushed by foreshortening — so the digits
+  // are as wide as the strip allows (20 m across, both digits ~45 px on
+  // screen at capture distance), set in Arial Black 900, pure white with a
+  // dark outline so they hold against both fresh asphalt and sun-bleached
+  // patches. The canvas is wider than tall because two digits sit side by
+  // side; the plane geometry below is 20 wide x 26 tall.
   const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 176;
+  c.width = 256;
+  c.height = 320;
   const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, 128, 176);
-  ctx.fillStyle = '#f5f2e8';
-  ctx.font = 'bold 104px Arial, sans-serif';
+  ctx.clearRect(0, 0, 256, 320);
+  ctx.font = '900 170px "Arial Black", Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 64, 92);
+  ctx.lineWidth = 12;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(18, 20, 24, 0.9)';
+  ctx.strokeText(text, 128, 164);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, 128, 164);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
-// Slope shading for cone hills, cheap and seeded-stable: per-vertex green
-// shading — darker at the foot, lighter toward the peak, plus a per-wedge
-// patch variation from a position hash. No rng() calls here, so the seeded
-// stream (and therefore the trees and clouds after it) stays identical.
+// Slope shading for hills, cheap and seeded-stable: per-vertex green
+// shading — darker at the foot, lighter toward the peak, plus two layers of
+// per-wedge patch variation from a position hash (a coarse 3-wedge wash and
+// a finer 7-wedge speckle), so a hill reads as mottled ground instead of a
+// smooth cone. No rng() calls here, so the seeded stream (and therefore
+// the trees and clouds after it) stays identical.
 function shadeCone(geo, h) {
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
@@ -133,9 +146,13 @@ function shadeCone(geo, h) {
     const vy = pos.getY(i);
     const vz = pos.getZ(i);
     const t = clamp((vy + h / 2) / h, 0, 1);
-    const patch = 0.9 + 0.1 * Math.sin(Math.atan2(vz, vx) * 3 + vy * 0.13);
-    const shade = (0.82 + 0.26 * t) * patch;
-    colors[i * 3] = shade;
+    const a = Math.atan2(vz, vx);
+    const wash = Math.sin(a * 3 + vy * 0.13);
+    const fine = Math.sin(a * 7 - vy * 0.05);
+    const patch = 0.88 + 0.09 * wash + 0.05 * fine;
+    // Darker, damper base band; drier, sunlit peak.
+    const shade = (0.78 + 0.3 * t) * patch;
+    colors[i * 3] = shade * (1 + 0.06 * t);
     colors[i * 3 + 1] = shade * (0.96 + 0.04 * patch);
     colors[i * 3 + 2] = shade * 0.94;
   }
@@ -181,7 +198,23 @@ function islandMesh(def, rng, mats) {
     );
     plateau.position.y = 0; // top at PLATEAU_TOP (2.5)
     group.add(plateau);
-    const hillGeo = new THREE.ConeGeometry(def.hill.r, def.hill.h, 9, 2);
+    const hillGeo = new THREE.ConeGeometry(def.hill.r, def.hill.h, 12, 3);
+    // Round 7: break the perfect-cone silhouette — jitter every ring below
+    // the apex, strongest at the foot, so the ridge line is uneven instead
+    // of a straight triangle edge.
+    {
+      const pos = hillGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        const t = clamp((y + def.hill.h / 2) / def.hill.h, 0, 1);
+        if (t < 0.98) {
+          const amp = 0.1 * (1 - t);
+          pos.setX(i, pos.getX(i) * (1 + (rng() - 0.5) * amp));
+          pos.setZ(i, pos.getZ(i) * (1 + (rng() - 0.5) * amp));
+        }
+      }
+      hillGeo.computeVertexNormals();
+    }
     shadeCone(hillGeo, def.hill.h);
     const hill = new THREE.Mesh(
       hillGeo,
@@ -189,16 +222,35 @@ function islandMesh(def, rng, mats) {
     );
     hill.position.set(def.hill.dx, PLATEAU_TOP - 2 + def.hill.h / 2, def.hill.dz);
     group.add(hill);
+    // Round 7: scrub trees hugging the lower slopes — a bare cone reads as
+    // a pyramid, a cone with trees on its skirt reads as a hill. Each tree
+    // sits on the cone profile (same formula groundHeightAt uses), scaled
+    // down so none pokes above the apex.
+    for (let i = 0; i < 8; i++) {
+      const a = rng() * Math.PI * 2;
+      const f = 0.3 + rng() * 0.45; // fraction of the hill radius out
+      const sx = def.hill.dx + Math.cos(a) * def.hill.r * f;
+      const sz = def.hill.dz + Math.sin(a) * def.hill.r * f;
+      const sy = PLATEAU_TOP - 2 + def.hill.h * (1 - f);
+      const slopeTree = makeTree(rng);
+      const s = 0.5 + rng() * 0.2;
+      slopeTree.scale.setScalar(s);
+      slopeTree.position.set(sx, sy, sz);
+      group.add(slopeTree);
+    }
   } else {
-    // Low-poly hill: a squashed cone with jittered rim vertices.
-    const geo = new THREE.ConeGeometry(def.r, def.h, 9, 3);
+    // Low-poly hill: a squashed cone with jittered vertices on every ring
+    // below the apex (round 7: the old rim-only jitter still left a
+    // straight triangle ridge; now the whole silhouette is uneven).
+    const geo = new THREE.ConeGeometry(def.r, def.h, 12, 4);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
-      const vx = pos.getX(i);
-      const vz = pos.getZ(i);
-      if (pos.getY(i) < def.h * 0.4) {
-        pos.setX(i, vx * (1 + (rng() - 0.5) * 0.22));
-        pos.setZ(i, vz * (1 + (rng() - 0.5) * 0.22));
+      const y = pos.getY(i);
+      const t = clamp((y + def.h / 2) / def.h, 0, 1);
+      if (t < 0.98) {
+        const amp = 0.16 * (1 - t * 0.6);
+        pos.setX(i, pos.getX(i) * (1 + (rng() - 0.5) * amp));
+        pos.setZ(i, pos.getZ(i) * (1 + (rng() - 0.5) * amp));
       }
     }
     geo.computeVertexNormals();
@@ -296,10 +348,13 @@ function runwayMesh(def, label, mats) {
   }
   // Runway numbers, painted to be read by the landing pilot: the number is
   // the strip heading in tens of degrees (home 36/18, Karang 03/21).
+  // Round 7: the plane is 20 m wide (the full strip width) x 26 m tall
+  // and sits 40 m past each threshold, so the digits are as large as the
+  // strip allows and face the pilot on final instead of hiding mid-strip.
   const numA = String(Math.round(((def.headingDeg + 360) % 360) / 10) || 36).padStart(2, '0');
   const numB = String(Math.round((((def.headingDeg + 180) % 360) / 10) || 36)).padStart(2, '0');
-  const numGeo = new THREE.PlaneGeometry(15, 21);
-  for (const [num, z, flip] of [[numA, def.length / 2 - 34, 0], [numB, -(def.length / 2 - 34), Math.PI]]) {
+  const numGeo = new THREE.PlaneGeometry(20, 26);
+  for (const [num, z, flip] of [[numA, def.length / 2 - 40, 0], [numB, -(def.length / 2 - 40), Math.PI]]) {
     const holder = new THREE.Group();
     const face = new THREE.Mesh(
       numGeo,
@@ -423,24 +478,34 @@ export function buildWorld(scene, seed = 1) {
   scene.add(runwayMesh(HOME_RUNWAY, 'home', mats));
   scene.add(runwayMesh(HOP_RUNWAY, 'hop', mats));
 
-  // Drifting clouds: clustered puffs in slightly different warm tints, so
-  // they read as volume instead of one flat white blob.
+  // Drifting clouds, round 7: the old icosahedron puffs read as flat white
+  // hexagons. Now each cloud is a layered stack of smooth spheres — one
+  // wide warm base, bright sunlit puffs on top, and a mauve shadow puff
+  // tucked underneath — flattened and stretched sideways so they read as
+  // stratus layers with real volume instead of one flat white blob.
   const cloudMats = [
-    new THREE.MeshBasicMaterial({ color: 0xfff3e2, transparent: true, opacity: 0.95 }),
-    new THREE.MeshBasicMaterial({ color: 0xfbe3d0, transparent: true, opacity: 0.92 }),
-    new THREE.MeshBasicMaterial({ color: 0xe9e2ee, transparent: true, opacity: 0.9 }),
+    new THREE.MeshBasicMaterial({ color: 0xfff6e8, transparent: true, opacity: 0.95 }),
+    new THREE.MeshBasicMaterial({ color: 0xfbe3d0, transparent: true, opacity: 0.9 }),
+    new THREE.MeshBasicMaterial({ color: 0xe9dfe8, transparent: true, opacity: 0.62 }),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.38 }),
   ];
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 18; i++) {
     const cloud = new THREE.Group();
-    const puffs = 4 + Math.floor(rng() * 3);
+    const puffs = 6 + Math.floor(rng() * 4);
     for (let p = 0; p < puffs; p++) {
-      const s = 26 + rng() * 42;
+      const isBase = p === 0;
+      const isShadow = !isBase && p % 4 === 0;
+      const s = isBase ? 55 + rng() * 40 : 18 + rng() * 55;
       const puff = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(s, 0),
-        cloudMats[Math.floor(rng() * cloudMats.length)],
+        new THREE.SphereGeometry(s, 12, 8),
+        cloudMats[isBase ? 1 : isShadow ? 2 : rng() < 0.25 ? 3 : 0],
       );
-      puff.position.set((rng() - 0.5) * 150, (rng() - 0.5) * 14, (rng() - 0.5) * 70);
-      puff.scale.y = 0.5;
+      puff.position.set(
+        (rng() - 0.5) * 170,
+        isBase ? 0 : isShadow ? -9 - rng() * 5 : 3 + rng() * 12,
+        (rng() - 0.5) * 80,
+      );
+      puff.scale.set(1.5 + rng() * 0.7, 0.36 + rng() * 0.14, 1.0 + rng() * 0.3);
       cloud.add(puff);
     }
     cloud.position.set((rng() - 0.5) * 6400, 420 + rng() * 260, (rng() - 0.5) * 6400);
@@ -481,7 +546,16 @@ export function groundHeightAt(x, z) {
 
 export function isOnRunway(x, z) {
   for (const def of [HOME_RUNWAY, HOP_RUNWAY]) {
-    const a = degToRad(-def.headingDeg);
+    // Round 7 fix: this rotated the offset the WRONG way (by +heading
+    // instead of -heading), so for the 25 deg Karang strip the test was off
+    // by twice the heading — a point on the strip centreline 140 m out
+    // measured 107 m "across" and failed. The home strip (heading 0) was
+    // unaffected, which is why the bug hid: only a dead-centre Karang
+    // touchdown ever counted as a landing, and groundHeightAt returned
+    // plateau 2.5 instead of strip 2.4 everywhere else on the strip.
+    // Inverting R_y(heading) means rotating by +heading here: local
+    // along = dx*sin(h) + dz*cos(h), across = dx*cos(h) - dz*sin(h).
+    const a = degToRad(def.headingDeg);
     const dx = x - def.x;
     const dz = z - def.z;
     const along = dx * Math.sin(a) + dz * Math.cos(a);

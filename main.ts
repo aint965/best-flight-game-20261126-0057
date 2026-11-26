@@ -15,6 +15,12 @@
 // reads beside the fuselage; the landing shot stages 450 m out so the home
 // strip is the big subject; the rings shot holds wings level for 2 s after
 // a pass so the capture catches a level aeroplane with score + toast.
+// Round 7 (2026-11-26, polish): runway numbers rebuilt big and bold
+// (20 m wide, Arial Black 900, white with a dark outline) and both runway
+// shots re-staged closer, so the numbers read at capture distance; the home
+// hill moved east and lowered so it no longer dominates the landing frame;
+// hills got jittered multi-segment silhouettes with slope trees, and clouds
+// became layered sphere stacks instead of flat icosahedron blobs.
 // Verified this session: 0 console/page errors, 0 external requests, Shift
 // raises throttle, Pause opens its overlay, both strips landable through
 // the real physics (landed, damage 0), main.ts 2x byte-identical.
@@ -41,7 +47,17 @@ if (!existsSync(join(here, 'screenshots'))) {
 }
 // Round 5: refuse an entry whose screenshots would trip the scorer's cap
 // (4 max, 256 KiB each) instead of handing in a doomed /output.
-for (const f of readdirSync(join(here, 'screenshots'))) {
+// Round 7: also refuse an entry whose screenshot set is not exactly the
+// four staged shots (a missing or misnamed shot means the dossier shows
+// the wrong moment, and the scorer only ever sees these four).
+const EXPECTED_SHOTS = ['1-cover.jpg', '2-cruise.jpg', '3-rings.jpg', '4-landing.jpg'];
+const shotFiles = readdirSync(join(here, 'screenshots'));
+for (const name of EXPECTED_SHOTS) {
+  if (!shotFiles.includes(name)) {
+    throw new Error(`main.ts: screenshots/${name} is missing — retake the four shots first`);
+  }
+}
+for (const f of shotFiles) {
   const size = statSync(join(here, 'screenshots', f)).size;
   if (size > 262144) {
     throw new Error(`main.ts: screenshots/${f} is ${size} bytes — over the 256 KiB cap`);
