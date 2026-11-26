@@ -40,6 +40,11 @@ function drawCompass(ctx, headingDeg) {
     const x = w / 2 + rel * 2.4;
     if (x < -10 || x > w + 10) continue;
     const label = labels.find(([d]) => d === ((deg % 360) + 360) % 360);
+    const isText = label || deg % 30 === 0;
+    // Text is centre-aligned: keep it clear of the canvas edges so a
+    // heading or degree number is never half-clipped by the strip border.
+    // Ticks are 1.5 px wide and may run right up to the edge.
+    if (isText && (x < 18 || x > w - 18)) continue;
     if (label) {
       ctx.fillStyle = '#ffd166';
       ctx.fillText(label[1], x, h / 2);

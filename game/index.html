@@ -50,12 +50,17 @@
 
   <div class="hud-bottom-center">
     <div id="throttle-slider" title="Throttle — drag, or hold Shift / Ctrl"><div id="throttle-fill"></div><div id="throttle-knob">THR</div></div>
-    <div class="hud-buttons">
-      <button id="btn-pause" type="button">⏸ Pause</button>
-      <button id="btn-mute" type="button">🔊 Sound</button>
-      <button id="btn-camera" type="button">📷 Camera</button>
-      <button id="btn-restart" type="button">↻ Restart</button>
-    </div>
+  </div>
+
+  <!-- Menu buttons live on the free left edge, mid-screen: the plane in the
+       chase camera always sits near the centre of the screen, so nothing
+       may sit in the middle band. Left-middle is empty (gauges end above,
+       attitude dial starts below) and stays clear of the aircraft. -->
+  <div class="hud-buttons hud-left-mid">
+    <button id="btn-pause" type="button">⏸ Pause</button>
+    <button id="btn-mute" type="button">🔊 Sound</button>
+    <button id="btn-camera" type="button">📷 Camera</button>
+    <button id="btn-restart" type="button">↻ Restart</button>
   </div>
 </div>
 
