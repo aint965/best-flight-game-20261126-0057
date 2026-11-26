@@ -1,0 +1,100 @@
+/* Langit Nusantara: Island Hopper — warm dusk glass HUD over a 3D sky. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #1a2f47; }
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #f2ede3; }
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 5; }
+#hud.show { display: block; }
+.hud-top-left, .hud-top-right { position: absolute; top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.hud-top-left { left: 14px; }
+.hud-top-right { right: 14px; align-items: flex-end; text-align: right; }
+.hud-top-center { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
+.gauge {
+  background: rgba(8, 18, 30, 0.62); border: 1px solid rgba(255, 209, 102, 0.45);
+  border-radius: 8px; padding: 5px 12px; min-width: 148px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.gauge-label { display: block; font-size: 10px; letter-spacing: 0.18em; color: #ffd166; font-weight: 700; }
+.gauge-value { font-size: 26px; font-weight: 800; line-height: 1.1; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(255, 209, 102, 0.55); }
+.gauge-value.small { font-size: 15px; font-weight: 700; }
+.gauge-unit { font-size: 13px; color: #cfe3f5; font-weight: 600; }
+.bar { height: 9px; background: rgba(255, 255, 255, 0.18); border-radius: 5px; overflow: hidden; margin-top: 4px; }
+.bar > div { height: 100%; width: 100%; background: #4ade80; border-radius: 5px; transition: width 0.2s; }
+.bar > div.warn { background: #ff5a3c; }
+#hud-stall {
+  display: none; background: #b91c1c; color: #fff; font-weight: 800; font-size: 13px;
+  padding: 7px 10px; border-radius: 8px; max-width: 260px; animation: blink 0.5s steps(2) infinite;
+}
+#hud-stall.show { display: block; }
+@keyframes blink { 50% { opacity: 0.45; } }
+#compass { border-radius: 8px; border: 1px solid rgba(255, 209, 102, 0.45); background: rgba(8, 18, 30, 0.55); }
+.heading-readout { font-size: 15px; font-weight: 800; margin-top: 3px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
+.heading-readout span { color: #ffd166; }
+#target-line { margin-top: 4px; font-size: 14px; font-weight: 700; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+#target-arrow { display: inline-block; color: #ffc93c; font-size: 16px; transition: transform 0.1s linear; }
+#hud-timer.urgent { color: #ff5a3c; }
+.hud-bottom-left, .hud-bottom-right { position: absolute; bottom: 14px; text-align: center; }
+.hud-bottom-left { left: 14px; }
+.hud-bottom-right { right: 14px; }
+#horizon, #minimap { border-radius: 50%; border: 2px solid rgba(255, 209, 102, 0.55); background: rgba(8, 18, 30, 0.55); }
+#minimap { border-radius: 10px; }
+.hud-caption { font-size: 10px; letter-spacing: 0.2em; color: #ffd166; font-weight: 700; margin-top: 4px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+.hud-bottom-center { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 18px; align-items: flex-end; pointer-events: auto; }
+#throttle-slider {
+  position: relative; width: 34px; height: 150px; border-radius: 10px;
+  background: rgba(8, 18, 30, 0.62); border: 1px solid rgba(255, 209, 102, 0.55);
+  cursor: pointer; overflow: hidden; touch-action: none;
+}
+#throttle-fill { position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; background: linear-gradient(to top, #ff8c42, #ffd166); }
+#throttle-knob { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; color: #fff; text-shadow: 0 1px 3px #000; }
+.hud-buttons { display: flex; flex-direction: column; gap: 6px; }
+.hud-buttons button, .ghost-btn {
+  pointer-events: auto; cursor: pointer; background: rgba(8, 18, 30, 0.72); color: #f2ede3;
+  border: 1px solid rgba(255, 209, 102, 0.55); border-radius: 8px; padding: 7px 12px;
+  font-size: 13px; font-weight: 700;
+}
+.hud-buttons button:hover, .ghost-btn:hover { background: rgba(255, 209, 102, 0.25); }
+#toast {
+  position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 6;
+  background: rgba(8, 18, 30, 0.8); border: 1px solid #ffd166; color: #ffe9a8;
+  padding: 9px 18px; border-radius: 999px; font-weight: 700; font-size: 15px;
+  opacity: 0; transition: opacity 0.25s; pointer-events: none; max-width: 90vw; text-align: center;
+}
+#toast.show { opacity: 1; }
+
+/* ---------- Overlays ---------- */
+.overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 10; background: rgba(6, 14, 26, 0.45); }
+.overlay.show { display: flex; }
+.panel {
+  background: rgba(8, 18, 30, 0.82); border: 1px solid rgba(255, 209, 102, 0.6); border-radius: 18px;
+  padding: 30px 38px; max-width: 640px; width: calc(100vw - 48px); text-align: center;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px);
+}
+.eyebrow { font-size: 11px; letter-spacing: 0.28em; color: #ffd166; font-weight: 800; }
+.panel h1 { font-size: 52px; line-height: 1.05; margin: 8px 0 0; color: #fff; text-shadow: 0 0 24px rgba(255, 180, 80, 0.6); }
+.panel h2 { font-size: 21px; letter-spacing: 0.42em; color: #ff8c42; margin-top: 2px; }
+.tagline { margin: 14px auto 0; font-size: 16px; line-height: 1.5; color: #e8e2d4; max-width: 520px; }
+.mission-row { display: flex; gap: 10px; margin-top: 20px; }
+.mission-card {
+  flex: 1; cursor: pointer; text-align: left; padding: 12px 13px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07); border: 2px solid rgba(255, 255, 255, 0.16); color: #f2ede3;
+}
+.mission-card:hover { border-color: #ffd166; }
+.mission-card.selected { border-color: #ff8c42; background: rgba(255, 140, 66, 0.18); box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.35); }
+.mission-tag { display: block; font-size: 10px; letter-spacing: 0.16em; color: #ffd166; font-weight: 800; }
+.mission-name { display: block; font-size: 18px; font-weight: 800; margin-top: 3px; }
+.mission-desc { display: block; font-size: 12.5px; color: #cfe3f5; margin-top: 2px; line-height: 1.35; }
+.blurb { margin-top: 14px; font-size: 14px; line-height: 1.5; color: #ffe9a8; min-height: 42px; }
+.big-btn {
+  margin-top: 18px; cursor: pointer; font-size: 19px; font-weight: 800; letter-spacing: 0.04em;
+  color: #241300; background: linear-gradient(180deg, #ffd166, #ff8c42);
+  border: none; border-radius: 999px; padding: 14px 34px; box-shadow: 0 6px 22px rgba(255, 140, 66, 0.5);
+}
+.big-btn:hover { filter: brightness(1.08); }
+.controls-hint { margin-top: 16px; font-size: 12.5px; color: #b9c9d8; line-height: 1.6; }
+.ghost-btn { margin-top: 12px; }
+#end-lines { margin-top: 14px; font-size: 16px; line-height: 1.7; color: #e8e2d4; }
+#overlay-end.win .panel { border-color: #4ade80; }
+#overlay-end.win h1 { color: #bbf7d0; }

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Langit Nusantara: Island Hopper — a flight game</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<!-- ============ HUD (lit instruments, always on while flying) ============ -->
+<div id="hud">
+  <div class="hud-top-left">
+    <div class="gauge"><span class="gauge-label">ALT</span><span class="gauge-value"><span id="hud-alt">0</span><span class="gauge-unit"> ft</span></span></div>
+    <div class="gauge"><span class="gauge-label">SPEED</span><span class="gauge-value"><span id="hud-speed">0</span><span class="gauge-unit"> kt</span></span></div>
+    <div class="gauge"><span class="gauge-label">V/S</span><span class="gauge-value"><span id="hud-vsi">+0</span><span class="gauge-unit"> fpm</span></span></div>
+    <div class="gauge"><span class="gauge-label">THR</span><span class="gauge-value"><span id="hud-thr">0%</span></span></div>
+    <div id="hud-stall">⚠ STALL — NOSE DOWN, FULL THROTTLE</div>
+  </div>
+
+  <div class="hud-top-center">
+    <canvas id="compass" width="360" height="34"></canvas>
+    <div class="heading-readout">HDG <span id="hud-hdg">000</span>°</div>
+    <div id="target-line"><span id="target-arrow">▲</span> <span id="target-dist">◉ RING — m</span></div>
+  </div>
+
+  <div class="hud-top-right">
+    <div class="gauge"><span class="gauge-label">SCORE</span><span class="gauge-value" id="hud-score">0</span></div>
+    <div class="gauge"><span class="gauge-label">BEST</span><span class="gauge-value" id="hud-best">0</span></div>
+    <div class="gauge"><span class="gauge-label">TIME</span><span class="gauge-value" id="hud-timer">--:--</span></div>
+    <div class="gauge"><span class="gauge-label">MISSION</span><span class="gauge-value small" id="hud-mission">RING RUN</span></div>
+    <div class="gauge"><span class="gauge-label">OBJECTIVE</span><span class="gauge-value small" id="hud-objective">—</span></div>
+    <div class="gauge"><span class="gauge-label">FUEL <span id="hud-fuel-num">100%</span></span><div class="bar"><div id="fuel-bar"></div></div></div>
+    <div class="gauge"><span class="gauge-label">DAMAGE <span id="hud-damage-num">0%</span></span><div class="bar"><div id="damage-bar"></div></div></div>
+  </div>
+
+  <div class="hud-bottom-left">
+    <canvas id="horizon" width="150" height="150"></canvas>
+    <div class="hud-caption">ATTITUDE</div>
+  </div>
+
+  <div class="hud-bottom-right">
+    <canvas id="minimap" width="170" height="170"></canvas>
+    <div class="hud-caption">ARCHIPELAGO MAP</div>
+  </div>
+
+  <div class="hud-bottom-center">
+    <div id="throttle-slider" title="Throttle — drag, or hold Shift / Ctrl"><div id="throttle-fill"></div><div id="throttle-knob">THR</div></div>
+    <div class="hud-buttons">
+      <button id="btn-pause" type="button">⏸ Pause</button>
+      <button id="btn-mute" type="button">🔊 Sound</button>
+      <button id="btn-camera" type="button">📷 Camera</button>
+      <button id="btn-restart" type="button">↻ Restart</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ============ Title screen ============ -->
+<div id="overlay-title" class="overlay show">
+  <div class="panel title-panel">
+    <div class="eyebrow">AN ORIGINAL FLIGHT GAME · NUSANTARA ARCHIPELAGO</div>
+    <h1>Langit Nusantara</h1>
+    <h2>ISLAND HOPPER</h2>
+    <p class="tagline">A bush plane, eight islands, one late-afternoon sky. Fly the rings, hop the strips, beat the storm — and mind your fuel.</p>
+    <div class="mission-row">
+      <button type="button" class="mission-card" data-mission="rings">
+        <span class="mission-tag">SORTIE 1 · FREE</span>
+        <span class="mission-name">Ring Run</span>
+        <span class="mission-desc">8 rings over the lagoon</span>
+      </button>
+      <button type="button" class="mission-card" data-mission="hop">
+        <span class="mission-tag">SORTIE 2 · FREE</span>
+        <span class="mission-name">Island Hop</span>
+        <span class="mission-desc">Land on 2 island runways</span>
+      </button>
+      <button type="button" class="mission-card" data-mission="storm">
+        <span class="mission-tag">SORTIE 3 · TIMED</span>
+        <span class="mission-name">Storm Courier</span>
+        <span class="mission-desc">6 rings + landing in 4:00</span>
+      </button>
+    </div>
+    <p id="mission-blurb" class="blurb"></p>
+    <button id="btn-start" type="button" class="big-btn">✈ &nbsp;FLY THIS SORTIE</button>
+    <p class="controls-hint">W/S pitch · A/D roll · Shift/Ctrl throttle · Space airbrake · C camera · P pause · M mute · R restart · 1/2/3 pick a sortie</p>
+  </div>
+</div>
+
+<!-- ============ Pause ============ -->
+<div id="overlay-pause" class="overlay">
+  <div class="panel">
+    <h1>PAUSED</h1>
+    <p class="tagline">The islands will wait. Your fuel will not — it only drains while you fly.</p>
+    <button id="btn-resume" type="button" class="big-btn">▶ &nbsp;RESUME FLYING</button>
+    <p class="controls-hint">P to resume · R to restart the sortie</p>
+  </div>
+</div>
+
+<!-- ============ Game over / complete ============ -->
+<div id="overlay-end" class="overlay">
+  <div class="panel">
+    <h1 id="end-title">SORTIE COMPLETE</h1>
+    <div id="end-lines"></div>
+    <button id="btn-fly-again" type="button" class="big-btn">✈ &nbsp;FLY AGAIN</button>
+    <button id="btn-title" type="button" class="ghost-btn">Back to title screen</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
