@@ -12,7 +12,7 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; co
 .hud-top-right { right: 14px; align-items: flex-end; text-align: right; }
 .hud-top-center { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
 .gauge {
-  background: rgba(8, 18, 30, 0.62); border: 1px solid rgba(255, 209, 102, 0.45);
+  background: rgba(8, 18, 30, 0.88); border: 1px solid rgba(255, 209, 102, 0.45);
   border-radius: 8px; padding: 5px 12px; min-width: 148px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
@@ -40,14 +40,18 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; co
 .hud-bottom-right { right: 14px; }
 #horizon, #minimap { border-radius: 50%; border: 2px solid rgba(255, 209, 102, 0.55); background: rgba(8, 18, 30, 0.55); }
 #minimap { border-radius: 10px; }
-.hud-caption { font-size: 10px; letter-spacing: 0.2em; color: #ffd166; font-weight: 700; margin-top: 4px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+/* Dark pill behind the captions: the sea's sun glitter sits right behind
+   the bottom-left corner, and bare gold text on it washes out (ATTITUDE
+   went pale in the rings shot). The pill keeps both captions readable
+   over any bright water or sky. */
+.hud-caption { display: inline-block; background: rgba(8, 18, 30, 0.72); border-radius: 999px; padding: 2px 10px; font-size: 10px; letter-spacing: 0.2em; color: #ffd166; font-weight: 700; margin-top: 4px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
 .hud-bottom-center { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 18px; align-items: flex-end; pointer-events: auto; }
 /* Menu buttons: pinned to the free left edge, mid-screen — clear of the
    gauges above, the attitude dial below, and the aircraft in the centre. */
 .hud-buttons.hud-left-mid { position: absolute; left: 14px; top: 248px; pointer-events: auto; z-index: 6; }
 #throttle-slider {
   position: relative; width: 280px; height: 30px; border-radius: 10px;
-  background: rgba(8, 18, 30, 0.62); border: 1px solid rgba(255, 209, 102, 0.55);
+  background: rgba(8, 18, 30, 0.85); border: 1px solid rgba(255, 209, 102, 0.55);
   cursor: pointer; overflow: hidden; touch-action: none;
 }
 #throttle-fill { position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: linear-gradient(to right, #ff8c42, #ffd166); }
@@ -58,7 +62,7 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; co
 #throttle-knob span { background: rgba(8, 18, 30, 0.72); border-radius: 999px; padding: 2px 10px; }
 .hud-buttons { display: flex; flex-direction: column; gap: 6px; }
 .hud-buttons button, .ghost-btn {
-  pointer-events: auto; cursor: pointer; background: rgba(8, 18, 30, 0.72); color: #f2ede3;
+  pointer-events: auto; cursor: pointer; background: rgba(8, 18, 30, 0.85); color: #f2ede3;
   border: 1px solid rgba(255, 209, 102, 0.55); border-radius: 8px; padding: 7px 12px;
   font-size: 13px; font-weight: 700;
 }

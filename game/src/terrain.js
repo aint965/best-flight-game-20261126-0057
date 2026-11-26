@@ -1,7 +1,7 @@
 // Langit Nusantara — terrain.js: builds the whole world from one seed.
 // One job: islands, sea, sky, clouds, runways and rings. No gameplay logic here.
 import * as THREE from 'three';
-import { mulberry32, degToRad } from './config.js';
+import { mulberry32, degToRad, clamp } from './config.js';
 
 // Island layout: [x, z, radius, peakHeight, hasRunway, name]
 export const ISLANDS = [
@@ -34,9 +34,26 @@ function islandMesh(def, rng) {
     }
   }
   geo.computeVertexNormals();
+  // Slope variation, cheap and seeded-stable: per-vertex green shading —
+  // darker at the foot, lighter toward the peak, plus a per-wedge patch
+  // variation from a position hash. No rng() calls here, so the seeded
+  // stream (and therefore the trees and clouds after it) stays identical.
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const vx = pos.getX(i);
+    const vy = pos.getY(i);
+    const vz = pos.getZ(i);
+    const t = clamp((vy + def.h / 2) / def.h, 0, 1);
+    const patch = 0.9 + 0.1 * Math.sin(Math.atan2(vz, vx) * 3 + vy * 0.13);
+    const shade = (0.82 + 0.26 * t) * patch;
+    colors[i * 3] = shade;
+    colors[i * 3 + 1] = shade * (0.96 + 0.04 * patch);
+    colors[i * 3 + 2] = shade * 0.94;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   const hill = new THREE.Mesh(
     geo,
-    new THREE.MeshLambertMaterial({ color: 0x3f8f4f, flatShading: true }),
+    new THREE.MeshLambertMaterial({ color: 0x3f8f4f, flatShading: true, vertexColors: true }),
   );
   hill.position.y = def.h / 2 - 4;
   group.add(hill);
@@ -48,7 +65,7 @@ function islandMesh(def, rng) {
   beach.position.y = 1;
   group.add(beach);
   // A few palm-ish trees: trunk + two crossed leaf cones.
-  const treeCount = Math.floor(def.r / 90);
+  const treeCount = Math.floor(def.r / 70);
   for (let i = 0; i < treeCount; i++) {
     const a = rng() * Math.PI * 2;
     const d = def.r * (0.25 + rng() * 0.55);

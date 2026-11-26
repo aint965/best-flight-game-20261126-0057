@@ -161,9 +161,13 @@ function stageShot() {
     // Island Hop, second leg: home strip already landed (+750 pts), now on
     // final approach to Pulau Karang's strip from the south-east, low and
     // descending — a different mission, a different angle, a different sky.
+    // Staged ~75 m to the plane's own right of the centreline so the lit
+    // strip reads BESIDE the fuselage instead of hiding behind it (the
+    // autopilot still curves the plane back toward the strip, but the
+    // capture happens before it has closed the offset).
     missionState.landingsDone = ['home'];
     missionState.score = 750;
-    flight.x = 1754; flight.y = 110; flight.z = 244;
+    flight.x = 1822; flight.y = 110; flight.z = 212;
     flight.heading = degToRad(25); flight.speedKt = 105; flight.throttle = 42; flight.onGround = false;
     flight.pitch = degToRad(-3);
   } else if (SHOT === 'rings') {

@@ -1,1 +1,1 @@
-[{"name":"1-cover.jpg","query":"?shot=cruise&seed=1"},{"name":"2-cruise.jpg","query":"?shot=hop&seed=1&cam=0"},{"name":"3-rings.jpg","query":"?shot=rings&seed=1"},{"name":"4-landing.jpg","query":"?shot=landing&seed=1"}]
+[{"name":"1-cover.jpg","query":"?shot=cruise&seed=1"},{"name":"2-cruise.jpg","query":"?shot=hop&seed=1&cam=0"},{"name":"3-rings.jpg","query":"?shot=rings&seed=1","wait":"window.__game && window.__game.mission.score >= 250","waitDelayMs":80},{"name":"4-landing.jpg","query":"?shot=landing&seed=1"}]

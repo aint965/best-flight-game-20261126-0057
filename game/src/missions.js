@@ -115,8 +115,15 @@ export function updateMission(missionState, flight, dt, nowSec, events) {
       missionState.combo += 1;
       const gained = SCORE.ring + SCORE.ringComboBonus * (missionState.combo - 1);
       missionState.score += gained;
+      // A passed ring stays visible but dimmed instead of vanishing: the
+      // pilot can still see the ring she just flew through (and a shot
+      // taken at the pass still shows it), while the next ring stays the
+      // bright one. The minimap already dims passed rings the same way.
+      // Dimmed gold, not grey: it must still read as a gold ring, just spent.
+      ring.material.color.setHex(0xb08d2e);
+      const glow = ring.children[0];
+      if (glow) glow.visible = false;
       events.onRing(missionState.ringIndex, gained, missionState.combo);
-      ring.visible = false;
     }
   }
   // Landing bookkeeping.

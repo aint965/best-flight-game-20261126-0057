@@ -29,7 +29,10 @@ function drawCompass(ctx, headingDeg) {
   const w = 360;
   const h = 34;
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = 'rgba(8, 18, 30, 0.55)';
+  // Near-opaque backing: the strip is drawn over the 3D sky, and a bright
+  // cloud drifting behind it used to show through the old 0.55 fill and
+  // wash out the heading letters.
+  ctx.fillStyle = 'rgba(8, 18, 30, 0.88)';
   ctx.fillRect(0, 0, w, h);
   ctx.font = 'bold 13px system-ui, sans-serif';
   ctx.textAlign = 'center';
