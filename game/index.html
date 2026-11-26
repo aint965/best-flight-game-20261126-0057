@@ -34,6 +34,7 @@
     <div class="gauge"><span class="gauge-label">TIME</span><span class="gauge-value" id="hud-timer">--:--</span></div>
     <div class="gauge"><span class="gauge-label">MISSION</span><span class="gauge-value small" id="hud-mission">RING RUN</span></div>
     <div class="gauge"><span class="gauge-label">OBJECTIVE</span><span class="gauge-value small" id="hud-objective">—</span></div>
+    <div class="gauge" id="storm-panel" style="display:none"><span class="gauge-label">STORM FRONT · <span id="hud-front-num">17.0 KM</span></span><span class="gauge-value small" id="hud-front-eta">ETA 04:00</span><div class="bar"><div id="front-bar"></div></div></div>
     <div class="gauge"><span class="gauge-label">FUEL <span id="hud-fuel-num">100%</span></span><div class="bar"><div id="fuel-bar"></div></div></div>
     <div class="gauge"><span class="gauge-label">DAMAGE <span id="hud-damage-num">0%</span></span><div class="bar"><div id="damage-bar"></div></div></div>
   </div>
@@ -87,7 +88,7 @@
       <button type="button" class="mission-card" data-mission="storm">
         <span class="mission-tag">SORTIE 3 · TIMED</span>
         <span class="mission-name">Storm Courier</span>
-        <span class="mission-desc">6 rings + landing in 4:00</span>
+        <span class="mission-desc">6 rings + landing before the front closes</span>
       </button>
     </div>
     <p id="mission-blurb" class="blurb"></p>

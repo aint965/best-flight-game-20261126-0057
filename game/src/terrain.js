@@ -25,6 +25,21 @@ export const HOP_RUNWAY = { x: 1500, z: -900, headingDeg: 25, length: 340, width
 // Flat grass plateau top for airfield islands.
 export const PLATEAU_TOP = 2.5;
 
+// Round 8 — backdrop scenery (NOT in ISLANDS on purpose: no gameplay, no
+// runway logic, no trees). A tall volcanic hero island far east, so the
+// cover shot's gold ring flies in front of a real mountain instead of a
+// flat sea horizon, plus three misty islands further out that read as
+// hazed silhouettes. All static geometry built once; the fog does the
+// hazing, no per-frame cost. The volcano stands on the cover shot's line
+// of sight: from the cover camera the volcano centre and ring 2 share
+// almost the same bearing, so the mountain rises directly behind the ring.
+export const HERO_VOLCANO = { x: 3900, z: 0, r: 1000, h: 650 };
+export const MISTY_ISLANDS = [
+  { x: 3200, z: -2800, r: 520, h: 190 },
+  { x: -3400, z: -2600, r: 430, h: 150 },
+  { x: 3300, z: 2400, r: 380, h: 120 },
+];
+
 // --- Procedural canvas textures (no external assets) ------------------------
 // Every texture is drawn in code from the seeded rng, so the world stays
 // deterministic and offline: mottled grass, speckled asphalt, grainy sand,
@@ -187,6 +202,68 @@ function makeTree(rng) {
   return tree;
 }
 
+// Round 8 — a pine: one tall dark cone on a short trunk, for the dense
+// clusters that make a hillside read as forest instead of a bare cone.
+function makePine(rng) {
+  const pine = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.7, 1.3, 8, 5),
+    new THREE.MeshLambertMaterial({ color: 0x6b4a2a }),
+  );
+  trunk.position.y = 4;
+  pine.add(trunk);
+  const layers = [
+    { r: 6.5, h: 15, y: 12 },
+    { r: 4.5, h: 12, y: 20 },
+  ];
+  const greens = [0x245e30, 0x2a6b36];
+  layers.forEach((L, i) => {
+    const crown = new THREE.Mesh(
+      new THREE.ConeGeometry(L.r, L.h, 7),
+      new THREE.MeshLambertMaterial({ color: greens[i % greens.length], flatShading: true }),
+    );
+    crown.position.y = L.y;
+    pine.add(crown);
+  });
+  return pine;
+}
+
+// Round 8 — a flat ribbon of water following a polyline: the home island's
+// river, a blue guide line across the plateau. Built as a triangle strip
+// 0.15 m above the grass so it never z-fights; the path stays 35+ m clear
+// of the home strip on every side, so no landing ever touches water.
+function riverMesh(points, width) {
+  const verts = [];
+  const idx = [];
+  for (let i = 0; i < points.length; i++) {
+    const [x, z] = points[i];
+    const [px, pz] = points[Math.max(0, i - 1)];
+    const [nx, nz] = points[Math.min(points.length - 1, i + 1)];
+    let dx = nx - px;
+    let dz = nz - pz;
+    const len = Math.hypot(dx, dz) || 1;
+    dx /= len;
+    dz /= len;
+    const ox = (-dz * width) / 2;
+    const oz = (dx * width) / 2;
+    verts.push(x + ox, 2.65, z + oz, x - ox, 2.65, z - oz);
+    if (i > 0) {
+      const a = (i - 1) * 2;
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshBasicMaterial({ color: 0x4aa8d8, transparent: true, opacity: 0.92 }),
+  );
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
 function islandMesh(def, rng, mats) {
   const group = new THREE.Group();
   if (def.runway) {
@@ -274,7 +351,8 @@ function islandMesh(def, rng, mats) {
   group.add(beach);
   // Trees on the grass: kept off the runway strips and, on airfield islands,
   // off the hill cone so none floats or buries itself.
-  const treeCount = Math.floor(def.r / (def.runway ? 55 : 70));
+  // Round 8: denser forest on the wild islands (divisor 48, was 70).
+  const treeCount = Math.floor(def.r / (def.runway ? 55 : 48));
   for (let i = 0; i < treeCount; i++) {
     const a = rng() * Math.PI * 2;
     const d = def.r * (0.25 + rng() * 0.55);
@@ -289,6 +367,58 @@ function islandMesh(def, rng, mats) {
     const tree = makeTree(rng);
     tree.position.set(Math.cos(a) * d, def.runway ? PLATEAU_TOP : def.h * 0.28, Math.sin(a) * d);
     group.add(tree);
+  }
+  // Round 8 — the plateau reads less empty: a river, patchwork fields and
+  // dense pine clusters. All positions are fixed (never rng-streamed), and
+  // the jitter below uses a per-island seeded rng so the main rng stream —
+  // and therefore every tree and cloud placed before round 8 — is untouched.
+  const rng8 = mulberry32(0x8badf00d + def.x * 7 + def.z * 13);
+  if (def.runway) {
+    // Field patches: flat coloured discs on the grass, clear of the strip
+    // and the hill on both airfield islands.
+    const fields = def.name === 'Pulau Rumah'
+      ? [[-250, 150, 55, 0x6b9e4a], [-350, -100, 65, 0x8aa84b], [250, 250, 50, 0x5c8a3e], [-150, 420, 60, 0xa8a04b], [350, 120, 45, 0x7fae56]]
+      : [[280, -280, 45, 0x8aa84b], [-280, 280, 55, 0x6b9e4a]];
+    for (const [fx, fz, fr, fc] of fields) {
+      const patch = new THREE.Mesh(
+        new THREE.CircleGeometry(fr, 20),
+        new THREE.MeshLambertMaterial({ color: fc, flatShading: true }),
+      );
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set(fx, 2.6, fz);
+      patch.renderOrder = 1;
+      group.add(patch);
+    }
+    // Pine clusters: six dark pines huddled together read as forest.
+    const clusters = def.name === 'Pulau Rumah'
+      ? [[-300, 80], [-420, -180], [280, 380], [480, 60]]
+      : [[350, 80], [-120, -280]];
+    for (const [cx, cz] of clusters) {
+      for (let i = 0; i < 6; i++) {
+        const pine = makePine(rng8);
+        const s = 0.9 + rng8() * 0.4;
+        pine.scale.setScalar(s);
+        pine.position.set(cx + (rng8() - 0.5) * 56, PLATEAU_TOP, cz + (rng8() - 0.5) * 56);
+        group.add(pine);
+      }
+    }
+  }
+  if (def.name === 'Pulau Rumah') {
+    // The river: from the hill foot, winding west to the shore. Every point
+    // is 35+ m from the strip centreline; the source pond sits outside the
+    // hill foot so the ribbon never dives under the cone.
+    group.add(riverMesh([
+      [140, -300], [90, -200], [60, -100], [55, -10], [40, 80],
+      [-40, 150], [-160, 220], [-300, 290], [-430, 350], [-480, 350],
+    ], 14));
+    const pond = new THREE.Mesh(
+      new THREE.CircleGeometry(26, 20),
+      new THREE.MeshBasicMaterial({ color: 0x4aa8d8, transparent: true, opacity: 0.92 }),
+    );
+    pond.rotation.x = -Math.PI / 2;
+    pond.position.set(140, 2.65, -300);
+    pond.renderOrder = 1;
+    group.add(pond);
   }
   group.position.set(def.x, 0, def.z);
   return group;
@@ -475,43 +605,241 @@ export function buildWorld(scene, seed = 1) {
     lagoon.renderOrder = 1;
     scene.add(lagoon);
   }
+  // Round 8 — the hero volcano and the misty islands. The volcano is a
+  // big jittered cone (same recipe as the wild islands, darker rock) with
+  // a pale ash cap, a dark crater, its own beach ring and lagoon, and a
+  // small white lighthouse with a glowing lamp on its western shoulder —
+  // the side the cover camera sees. The misty islands are plain pale
+  // cones; the fog hazes them into silhouettes. All of it is static
+  // geometry: built once, never touched per frame.
+  {
+    const v = HERO_VOLCANO;
+    const vGeo = new THREE.ConeGeometry(v.r, v.h, 14, 4);
+    {
+      const pos = vGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        const t = clamp((y + v.h / 2) / v.h, 0, 1);
+        if (t < 0.98) {
+          const amp = 0.14 * (1 - t * 0.6);
+          pos.setX(i, pos.getX(i) * (1 + (rng() - 0.5) * amp));
+          pos.setZ(i, pos.getZ(i) * (1 + (rng() - 0.5) * amp));
+        }
+      }
+      vGeo.computeVertexNormals();
+    }
+    shadeCone(vGeo, v.h);
+    const volcano = new THREE.Mesh(
+      vGeo,
+      new THREE.MeshLambertMaterial({ color: 0x55684f, flatShading: true, vertexColors: true }),
+    );
+    volcano.position.set(v.x, v.h / 2 - 4, v.z);
+    scene.add(volcano);
+    // Pale ash cap: a cone with the same slope, apex at the volcano apex.
+    const cap = new THREE.Mesh(
+      new THREE.ConeGeometry(231, 150, 14, 1),
+      new THREE.MeshLambertMaterial({ color: 0xe8e2d4, flatShading: true }),
+    );
+    cap.position.set(v.x, v.h - 4 - 75, v.z);
+    scene.add(cap);
+    // Dark crater mouth at the very top.
+    const crater = new THREE.Mesh(
+      new THREE.CylinderGeometry(58, 58, 10, 14),
+      new THREE.MeshLambertMaterial({ color: 0x2b2b2b, flatShading: true }),
+    );
+    crater.position.set(v.x, v.h - 4 - 2, v.z);
+    scene.add(crater);
+    // Beach ring + lagoon, same as the other islands.
+    const vBeach = new THREE.Mesh(
+      new THREE.CylinderGeometry(v.r * 1.02, v.r * 1.12, 7, 14),
+      new THREE.MeshLambertMaterial({ map: mats.sand, flatShading: true }),
+    );
+    vBeach.position.set(v.x, -2, v.z);
+    scene.add(vBeach);
+    const vLagoon = new THREE.Mesh(
+      new THREE.RingGeometry(v.r * 0.98, v.r * 1.9, 40),
+      new THREE.MeshBasicMaterial({ color: 0x3fb8a6, transparent: true, opacity: 0.26, depthWrite: false }),
+    );
+    vLagoon.rotation.x = -Math.PI / 2;
+    vLagoon.position.set(v.x, 0.25, v.z);
+    vLagoon.renderOrder = 1;
+    scene.add(vLagoon);
+    // Lighthouse on the western shoulder (cone height there ~548 m): a
+    // white tower with a red band and roof, and a warm glow sprite at the
+    // lamp so the light reads even at 3.5 km.
+    const light = new THREE.Group();
+    const tower = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.5, 4.5, 26, 8),
+      new THREE.MeshLambertMaterial({ color: 0xf5f2e8 }),
+    );
+    tower.position.y = 13;
+    light.add(tower);
+    const band = new THREE.Mesh(
+      new THREE.CylinderGeometry(4.2, 4.2, 6, 8),
+      new THREE.MeshLambertMaterial({ color: 0xc23b2e }),
+    );
+    band.position.y = 9;
+    light.add(band);
+    const roof = new THREE.Mesh(
+      new THREE.ConeGeometry(5, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0xc23b2e }),
+    );
+    roof.position.y = 29;
+    light.add(roof);
+    const lamp = new THREE.Mesh(
+      new THREE.SphereGeometry(3, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffe9a8 }),
+    );
+    lamp.position.y = 24;
+    light.add(lamp);
+    const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTexture(), transparent: true, depthWrite: false, fog: false, opacity: 0.9,
+    }));
+    lampGlow.scale.set(110, 110, 1);
+    lampGlow.position.y = 24;
+    light.add(lampGlow);
+    light.position.set(v.x - 150, v.h * (1 - 150 / v.r) - 4, v.z + 30);
+    scene.add(light);
+    // Misty islands: plain pale cones, no trees, no beach detail — the
+    // fog turns them into distant silhouettes.
+    for (const m of MISTY_ISLANDS) {
+      const mGeo = new THREE.ConeGeometry(m.r, m.h, 12, 3);
+      const pos = mGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        const t = clamp((y + m.h / 2) / m.h, 0, 1);
+        if (t < 0.98) {
+          const amp = 0.12 * (1 - t * 0.6);
+          pos.setX(i, pos.getX(i) * (1 + (rng() - 0.5) * amp));
+          pos.setZ(i, pos.getZ(i) * (1 + (rng() - 0.5) * amp));
+        }
+      }
+      mGeo.computeVertexNormals();
+      const misty = new THREE.Mesh(
+        mGeo,
+        new THREE.MeshLambertMaterial({ color: 0x9db4c0, flatShading: true }),
+      );
+      misty.position.set(m.x, m.h / 2 - 4, m.z);
+      scene.add(misty);
+    }
+  }
   scene.add(runwayMesh(HOME_RUNWAY, 'home', mats));
   scene.add(runwayMesh(HOP_RUNWAY, 'hop', mats));
 
-  // Drifting clouds, round 7: the old icosahedron puffs read as flat white
-  // hexagons. Now each cloud is a layered stack of smooth spheres — one
-  // wide warm base, bright sunlit puffs on top, and a mauve shadow puff
-  // tucked underneath — flattened and stretched sideways so they read as
-  // stratus layers with real volume instead of one flat white blob.
+  // Drifting clouds, round 8: the round-7 sphere stacks still read as flat
+  // ellipses from a distance, so the puffs are taller now (up to 0.8 of
+  // their width instead of 0.5), there are more of them per cloud, and a
+  // few clouds hang LOW over the islands (y 240-320) so the pilot flies
+  // under real cloud bellies instead of past distant white smudges.
+  // Each cloud also throws a soft shadow: a dark radial blob riding the
+  // ground directly under it (main.js moves it every frame), offset east
+  // because the sun sits in the west.
   const cloudMats = [
     new THREE.MeshBasicMaterial({ color: 0xfff6e8, transparent: true, opacity: 0.95 }),
     new THREE.MeshBasicMaterial({ color: 0xfbe3d0, transparent: true, opacity: 0.9 }),
     new THREE.MeshBasicMaterial({ color: 0xe9dfe8, transparent: true, opacity: 0.62 }),
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.38 }),
+    new THREE.MeshBasicMaterial({ color: 0xcfc4d6, transparent: true, opacity: 0.5 }),
   ];
-  for (let i = 0; i < 18; i++) {
+  const shadowTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+    grad.addColorStop(0, 'rgba(10, 20, 35, 0.55)');
+    grad.addColorStop(0.7, 'rgba(10, 20, 35, 0.22)');
+    grad.addColorStop(1, 'rgba(10, 20, 35, 0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  })();
+  world.cloudShadows = [];
+  const lowCloudSpots = [
+    [200, 280, -1400], [1700, 300, -200], [-400, 260, 1200], [900, 300, 1400],
+  ];
+  for (let i = 0; i < 22; i++) {
     const cloud = new THREE.Group();
-    const puffs = 6 + Math.floor(rng() * 4);
+    const isLow = i >= 18;
+    const puffs = 7 + Math.floor(rng() * 5);
     for (let p = 0; p < puffs; p++) {
       const isBase = p === 0;
       const isShadow = !isBase && p % 4 === 0;
-      const s = isBase ? 55 + rng() * 40 : 18 + rng() * 55;
+      const isTower = !isBase && !isShadow && p % 5 === 0;
+      const s = isBase ? 60 + rng() * 45 : isTower ? 16 + rng() * 18 : 18 + rng() * 55;
       const puff = new THREE.Mesh(
         new THREE.SphereGeometry(s, 12, 8),
-        cloudMats[isBase ? 1 : isShadow ? 2 : rng() < 0.25 ? 3 : 0],
+        cloudMats[isBase ? 1 : isShadow ? (rng() < 0.5 ? 2 : 4) : rng() < 0.25 ? 3 : 0],
       );
       puff.position.set(
         (rng() - 0.5) * 170,
-        isBase ? 0 : isShadow ? -9 - rng() * 5 : 3 + rng() * 12,
+        isBase ? 0 : isShadow ? -9 - rng() * 5 : isTower ? 14 + rng() * 10 : 3 + rng() * 12,
         (rng() - 0.5) * 80,
       );
-      puff.scale.set(1.5 + rng() * 0.7, 0.36 + rng() * 0.14, 1.0 + rng() * 0.3);
+      puff.scale.set(
+        1.5 + rng() * 0.7,
+        isTower ? 0.9 + rng() * 0.3 : 0.5 + rng() * 0.3,
+        1.0 + rng() * 0.3,
+      );
       cloud.add(puff);
     }
-    cloud.position.set((rng() - 0.5) * 6400, 420 + rng() * 260, (rng() - 0.5) * 6400);
+    if (isLow) {
+      const [lx, ly, lz] = lowCloudSpots[i - 18];
+      cloud.position.set(lx, ly, lz);
+    } else {
+      cloud.position.set((rng() - 0.5) * 6400, 420 + rng() * 260, (rng() - 0.5) * 6400);
+    }
     cloud.userData.drift = 2 + rng() * 4;
     scene.add(cloud);
     world.clouds.push(cloud);
+    // Its shadow: a soft dark ellipse on the ground below, sized to the
+    // cloud, following it every frame (see main.js).
+    const blob = new THREE.Mesh(
+      new THREE.PlaneGeometry(300, 200),
+      new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0.16, depthWrite: false }),
+    );
+    blob.rotation.x = -Math.PI / 2;
+    blob.renderOrder = 2;
+    scene.add(blob);
+    world.cloudShadows.push({ cloud, blob, baseOpacity: 0.16 });
+  }
+  // Round 8: the Storm Courier front — a dark wall of storm cloud in the
+  // far east, visible ONLY while flying that sortie (main.js toggles
+  // visibility by mission). It starts 4.2 km out and closes to 2.8 km as
+  // the 4:00 courier window runs down, so the pilot watches the sky darken.
+  {
+    const stormWall = new THREE.Group();
+    const wallMats = [
+      new THREE.MeshBasicMaterial({ color: 0x3a4556, transparent: true, opacity: 0.96 }),
+      new THREE.MeshBasicMaterial({ color: 0x2f3848, transparent: true, opacity: 0.96 }),
+      new THREE.MeshBasicMaterial({ color: 0x6b7688, transparent: true, opacity: 0.9 }),
+    ];
+    // A solid dark backplane so the wall reads as a front, not a row of puffs.
+    const back = new THREE.Mesh(
+      new THREE.PlaneGeometry(2800, 750),
+      new THREE.MeshBasicMaterial({ color: 0x333e50, transparent: true, opacity: 0.6 }),
+    );
+    back.rotation.y = -Math.PI / 2; // face west, toward the islands
+    back.position.set(0, 380, 0);
+    stormWall.add(back);
+    for (let i = 0; i < 16; i++) {
+      const z = -1300 + i * 173 + (rng() - 0.5) * 60;
+      const s = 130 + rng() * 130;
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 8), wallMats[i % 2]);
+      puff.position.set((rng() - 0.5) * 160, 120 + rng() * 420, z);
+      puff.scale.set(0.7 + rng() * 0.4, 0.55 + rng() * 0.35, 1.1 + rng() * 0.5);
+      stormWall.add(puff);
+    }
+    // Lit rim on top: a few pale puffs catching the last sun.
+    for (let i = 0; i < 4; i++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(90 + rng() * 60, 10, 8), wallMats[2]);
+      puff.position.set((rng() - 0.5) * 120, 620 + rng() * 90, -1000 + i * 650 + (rng() - 0.5) * 80);
+      puff.scale.set(1.4, 0.5, 1.0);
+      stormWall.add(puff);
+    }
+    stormWall.position.set(4200, 0, 0);
+    stormWall.visible = false;
+    scene.add(stormWall);
+    world.stormWall = stormWall;
   }
   return world;
 }
@@ -537,6 +865,18 @@ export function groundHeightAt(x, z) {
       }
     } else if (d < def.r * 1.05) {
       // Cone profile: peak at centre, beach at the rim.
+      const h = Math.max(0, def.h * (1 - d / (def.r * 1.05)) - 4);
+      if (h > best) best = h;
+    }
+  }
+  // Round 8: scenery cones are real ground too — a pilot can fly into the
+  // volcano's slopes, so the height function must know them. (They are not
+  // in ISLANDS on purpose: no runways, no trees, no lagoon logic there.)
+  for (const def of [HERO_VOLCANO, ...MISTY_ISLANDS]) {
+    const dx = x - def.x;
+    const dz = z - def.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d < def.r * 1.05) {
       const h = Math.max(0, def.h * (1 - d / (def.r * 1.05)) - 4);
       if (h > best) best = h;
     }

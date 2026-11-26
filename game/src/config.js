@@ -60,12 +60,12 @@ export const MISSIONS = [
     id: 'storm',
     name: 'Storm Courier',
     tag: 'SORTIE 3',
-    goal: 'Fly 6 rings, then land home before the clock runs out',
+    goal: 'Fly 6 rings, then land home before the storm front closes the strait',
     rings: 6,
     timeLimitSec: 240,
     wind: 11,
     startFuel: 100,
-    blurb: 'A courier run in a crosswind, against the clock. Rings first, then a landing — late means no bonus at all.',
+    blurb: 'A storm front is rolling in from the east and will close the strait in 4:00. Fly the six courier rings, then land on the home strip before the front arrives — the home clinic is counting on this delivery.',
   },
 ];
 

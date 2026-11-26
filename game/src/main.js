@@ -175,14 +175,19 @@ function stageShot() {
   mode = 'flying';
   showOverlay(null);
   if (SHOT === 'cruise') {
-    // Cover: ring 1 already banked (+250 pts), ring 2 big ahead at ~210 m —
-    // the ring reads at a glance, Pulau Karang's island sits ahead-right.
-    missionState.ringIndex = 1;
-    missionState.score = 250;
-    missionState.combo = 1;
+    // Cover: rings 1-2 already banked (+500 pts), ring 3 big ahead — and
+    // the plane flies ESE straight at it, so the hero volcano (3900, 0)
+    // rises directly behind the gold ring: the cover finally has depth
+    // (sea → Karang island → ring → volcano), not a flat sea horizon.
+    // The old staging flew NE at ring 2, which put the volcano 62 deg
+    // off-axis — out of frame entirely (round 8, first pass).
+    missionState.ringIndex = 2;
+    missionState.score = 500;
+    missionState.combo = 2;
     missionState.rings[0].visible = false;
-    const ring = missionState.rings[1];
-    flight.x = 550; flight.y = 185; flight.z = -950;
+    missionState.rings[1].visible = false;
+    const ring = missionState.rings[2];
+    flight.x = 1198; flight.y = 185; flight.z = -757;
     flight.speedKt = 125; flight.throttle = 68; flight.onGround = false;
     flight.heading = Math.atan2(-(ring.position.x - flight.x), -(ring.position.z - flight.z));
   } else if (SHOT === 'hop') {
@@ -449,6 +454,32 @@ function frame(now) {
   for (const cloud of world.clouds) {
     cloud.position.x += cloud.userData.drift * dt;
     if (cloud.position.x > 3400) cloud.position.x = -3400;
+  }
+  // Round 8: cloud shadows ride the ground under their clouds, offset east
+  // because the sun sits in the west. On steep ground the shadow fades out
+  // instead of cutting through the slope — a flat blob on a hillside would
+  // read as a dark smear, not a shadow.
+  for (const s of world.cloudShadows || []) {
+    const cx = s.cloud.position.x + 100;
+    const cz = s.cloud.position.z + 30;
+    const g0 = groundHeightAt(cx, cz);
+    const spread = Math.max(
+      Math.abs(groundHeightAt(cx + 80, cz) - g0),
+      Math.abs(groundHeightAt(cx - 80, cz) - g0),
+    );
+    s.blob.position.set(cx, g0 + 0.6, cz);
+    s.blob.material.opacity = s.baseOpacity * clamp(1 - spread / 40, 0.25, 1);
+  }
+  // Round 8: the storm front is only ever visible on the Storm Courier
+  // sortie, and it advances from 4.2 km to 2.8 km as the courier clock
+  // runs down — the pilot watches the wall close in.
+  if (world.stormWall) {
+    const isStorm = missionId === 'storm';
+    world.stormWall.visible = isStorm && mode !== 'title';
+    if (isStorm && missionState.mission.timeLimitSec > 0) {
+      const elapsed = missionState.mission.timeLimitSec - missionState.timeLeft;
+      world.stormWall.position.x = 4200 - clamp(elapsed / 240, 0, 1) * 1400;
+    }
   }
 
   if (mode !== 'title') updateCamera(dt);

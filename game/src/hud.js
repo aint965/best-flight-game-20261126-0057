@@ -112,15 +112,17 @@ function drawMinimap(ctx, state, rings, nextRingIndex, homeRunway, hopRunway) {
   ctx.fillRect(0, 0, w, h);
   const scale = w / 9000;
   const toMap = (x, z) => [w / 2 + x * scale, h / 2 + z * scale];
-  // Sea + islands.
+  // Sea + islands. Round 8: the volcano and the misty islands are on the
+  // map too — grey for the hero volcano, pale blue-grey for the misty ones.
   ctx.fillStyle = '#1e6f9e';
   ctx.fillRect(4, 4, w - 8, h - 8);
   for (const isl of [
-    [0, 0, 620], [1500, -900, 420], [-1300, -1100, 380], [900, 1400, 300],
-    [-1700, 900, 460], [2600, 600, 240], [-2600, -400, 260], [400, -2400, 200],
+    [0, 0, 620, '#3f8f4f'], [1500, -900, 420, '#3f8f4f'], [-1300, -1100, 380, '#3f8f4f'], [900, 1400, 300, '#3f8f4f'],
+    [-1700, 900, 460, '#3f8f4f'], [2600, 600, 240, '#3f8f4f'], [-2600, -400, 260, '#3f8f4f'], [400, -2400, 200, '#3f8f4f'],
+    [3900, 0, 1000, '#6b7a72'], [3200, -2800, 520, '#7d99a8'], [-3400, -2600, 430, '#7d99a8'], [3300, 2400, 380, '#7d99a8'],
   ]) {
     const [mx, my] = toMap(isl[0], isl[1]);
-    ctx.fillStyle = '#3f8f4f';
+    ctx.fillStyle = isl[3];
     ctx.beginPath();
     ctx.arc(mx, my, Math.max(2, isl[2] * scale), 0, Math.PI * 2);
     ctx.fill();
@@ -175,6 +177,20 @@ export function updateHud(hud, view) {
   // sortie time everywhere else (a pilot wants to know how long she has
   // been airborne, and a screenshot should never show a dead "--:--").
   setText('hud-timer', mission && mission.timeLimitSec ? formatTime(timeLeft) : formatTime(elapsedSec || 0));
+  // Round 8: Storm Courier's front panel — distance + ETA, only on that
+  // sortie. The front starts 17 km out and closes as the 4:00 window runs
+  // down; the bar drains with it and turns red under 30 s.
+  const stormPanel = $('storm-panel');
+  if (stormPanel) {
+    const isStorm = mission && mission.id === 'storm';
+    stormPanel.style.display = isStorm ? '' : 'none';
+    if (isStorm) {
+      const frac = mission.timeLimitSec > 0 ? clamp(timeLeft / mission.timeLimitSec, 0, 1) : 1;
+      setText('hud-front-num', `${(17 * frac).toFixed(1)} KM`);
+      setText('hud-front-eta', `ETA ${formatTime(timeLeft)}`);
+      setBar('front-bar', frac * 100, 12.5);
+    }
+  }
   setText('hud-damage-num', `${Math.round(state.damage)}%`);
   setBar('fuel-bar', state.fuel, 25);
   setBar('damage-bar', state.damage, 60);

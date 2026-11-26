@@ -1,7 +1,7 @@
 // Langit Nusantara — missions.js: sorties, rings and scoring.
 // One job: know what the pilot must do next and what it is worth.
 import * as THREE from 'three';
-import { MISSIONS, SCORE, clamp, mulberry32 } from './config.js';
+import { MISSIONS, SCORE, clamp, formatTime, mulberry32 } from './config.js';
 import { makeRing, HOME_RUNWAY, HOP_RUNWAY } from './terrain.js';
 
 export function getMission(id) {
@@ -85,8 +85,11 @@ export function objectiveText(missionState) {
     return done === 0 ? 'Land on the home strip, then Pulau Karang' : done === 1 ? 'One down — land on Pulau Karang' : 'Both strips done — fly home';
   }
   if (m.id === 'storm') {
-    if (missionState.ringIndex < m.rings) return `Courier rings ${missionState.ringIndex}/${m.rings}, then land home`;
-    return 'Rings done — land on the home strip before the clock ends';
+    // Round 8: the objective itself tells the story — the front is a clock
+    // with a distance, not just a timer.
+    const eta = formatTime(missionState.timeLeft);
+    if (missionState.ringIndex < m.rings) return `Courier rings ${missionState.ringIndex}/${m.rings} — front closes in ${eta}`;
+    return 'Rings done — land home before the front closes';
   }
   return m.goal;
 }

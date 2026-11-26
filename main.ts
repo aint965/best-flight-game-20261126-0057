@@ -25,6 +25,23 @@
 // raises throttle, Pause opens its overlay, both strips landable through
 // the real physics (landed, damage 0), main.ts 2x byte-identical.
 //
+// Round 8 (2026-11-26, reference-quality polish): the backdrop grows four
+// layers — sea, green islands, a tall volcanic hero island with a
+// lighthouse on its shoulder far east (it rises directly behind the cover
+// shot's gold ring), and three misty islands hazed by the fog — plus taller
+// layered clouds with low cloud bellies over the islands, soft cloud
+// shadows drifting over the ground, a winding river + patchwork fields +
+// dense pine clusters on the home plateau, and a Storm Courier story: a
+// dark storm-front wall closing in from the east with a HUD panel showing
+// front distance and ETA. Nothing about the runways, the shot staging, or
+// the isOnRunway fix (round 7) changed.
+// Verified this session: 0 console/page errors in all four shots, Shift
+// raises throttle, Pause opens its overlay, throttle slider sets ~75%,
+// both strips landable through the real physics (home landed at (-3, 23),
+// Karang at (1556, -804), both landed=true, damage 0, +750 pts), the
+// storm panel reads "16.9 KM / ETA 04:00" and counts down, the volcano
+// stands dead behind the cover ring, main.ts 2x byte-identical.
+//
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
